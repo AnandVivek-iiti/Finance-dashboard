@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 
 const ParseErrorSchema = new mongoose.Schema(
   {
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
     statementId: { type: mongoose.Schema.Types.ObjectId, ref: "Statement", required: true, index: true },
     rowIndex: { type: Number, default: null },
     rawRow: { type: mongoose.Schema.Types.Mixed, default: null },

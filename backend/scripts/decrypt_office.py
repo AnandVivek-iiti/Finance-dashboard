@@ -6,12 +6,12 @@ decrypt it to a sibling file using msoffcrypto-tool.
 Usage: python decrypt_office.py <path-to-file> [password]
 
 Prints JSON to stdout:
-  {"encrypted": false}                          — file wasn't encrypted, read it as-is
-  {"encrypted": true, "decryptedPath": "..."}    — decrypted successfully, read THIS path instead
-  {"error": "PASSWORD_REQUIRED"}                 — encrypted, no password given
-  {"error": "INVALID_PASSWORD"}                  — encrypted, given password is wrong
-  {"error": "MISSING_DEPENDENCY", ...}           — msoffcrypto-tool not installed
-  {"error": "UNREADABLE_FILE", ...}              — genuine read failure
+  {"encrypted": false}                          - file wasn't encrypted, read it as-is
+  {"encrypted": true, "decryptedPath": "..."}    - decrypted successfully, read THIS path instead
+  {"error": "PASSWORD_REQUIRED"}                 - encrypted, no password given
+  {"error": "INVALID_PASSWORD"}                  - encrypted, given password is wrong
+  {"error": "MISSING_DEPENDENCY", ...}           - msoffcrypto-tool not installed
+  {"error": "UNREADABLE_FILE", ...}              - genuine read failure
 
 Always exits 0 on a well-formed JSON result (even for expected "error" cases) so
 the Node caller can rely on parsing stdout as JSON rather than distinguishing exit codes.

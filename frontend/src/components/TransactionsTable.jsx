@@ -107,7 +107,7 @@ export default function TransactionsTable({ selectedStatementIds, filters }) {
                   <td className="max-w-[280px] truncate py-2 pr-3 text-ink" title={t.remarks}>
                     <span className="inline-flex items-center gap-1.5">
                       {!t.reconciled && (
-                        <AlertTriangle size={12} className="shrink-0 text-warn" title="Excluded from totals — unverifiable" />
+                        <AlertTriangle size={12} className="shrink-0 text-warn" title="Excluded from totals - unverifiable" />
                       )}
                       {t.remarks}
                     </span>

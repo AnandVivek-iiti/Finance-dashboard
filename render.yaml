@@ -20,7 +20,7 @@ services:
 
   # ---- Frontend: React (Vite) static build ----
   - type: web
-    name: finance-dashboard-frontend
+    name: finance-dashboard
     runtime: static
     rootDir: frontend
     buildCommand: npm install && npm run build

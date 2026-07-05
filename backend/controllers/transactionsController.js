@@ -3,8 +3,8 @@ const Transaction = require("../models/Transaction");
 const CategoryOverride = require("../models/CategoryOverride");
 const { normalizeRemarks, extractMerchant } = require("../parsers/categorizer");
 
-function buildFilter(query) {
-  const filter = {};
+function buildFilter(query, userId) {
+  const filter = { userId };
   if (query.statementIds) {
     const ids = String(query.statementIds).split(",").filter(Boolean).map((id) => new mongoose.Types.ObjectId(id));
     filter.statementId = { $in: ids };
@@ -23,7 +23,7 @@ function buildFilter(query) {
 }
 
 async function listTransactions(req, res) {
-  const filter = buildFilter(req.query);
+  const filter = buildFilter(req.query, req.userId);
   const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
   const limit = Math.min(parseInt(req.query.limit, 10) || 50, 500);
   const sortField = req.query.sortBy || "date";
@@ -49,7 +49,7 @@ async function updateCategory(req, res) {
     return res.status(400).json({ error: "category is required" });
   }
 
-  const txn = await Transaction.findById(id);
+  const txn = await Transaction.findOne({ _id: id, userId: req.userId });
   if (!txn) return res.status(404).json({ error: "Transaction not found" });
 
   txn.category = category;
@@ -59,8 +59,9 @@ async function updateCategory(req, res) {
 
   const normalized = normalizeRemarks(txn.remarks);
   await CategoryOverride.findOneAndUpdate(
-    { normalizedRemarks: normalized },
+    { userId: req.userId, normalizedRemarks: normalized },
     {
+      userId: req.userId,
       normalizedRemarks: normalized,
       category,
       merchantOrSource: merchantOrSource || extractMerchant(txn.remarks),
@@ -73,7 +74,7 @@ async function updateCategory(req, res) {
 }
 
 async function listDistinctCategories(req, res) {
-  const filter = buildFilter(req.query);
+  const filter = buildFilter(req.query, req.userId);
   const categories = await Transaction.distinct("category", filter);
   res.json({ categories: categories.sort() });
 }

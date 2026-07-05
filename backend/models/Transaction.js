@@ -2,6 +2,11 @@ const mongoose = require("mongoose");
 
 const TransactionSchema = new mongoose.Schema(
   {
+    // Duplicated from Statement on purpose (defense-in-depth): filter by
+    // userId directly here instead of only trusting statementId ownership,
+    // so a bug in a controller's join logic can't leak another user's rows.
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
+
     statementId: { type: mongoose.Schema.Types.ObjectId, ref: "Statement", required: true, index: true },
 
     date: { type: Date, required: true, index: true },
@@ -28,8 +33,8 @@ const TransactionSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-TransactionSchema.index({ statementId: 1, date: 1 });
-TransactionSchema.index({ statementId: 1, category: 1 });
-TransactionSchema.index({ statementId: 1, type: 1 });
+TransactionSchema.index({ userId: 1, statementId: 1, date: 1 });
+TransactionSchema.index({ userId: 1, statementId: 1, category: 1 });
+TransactionSchema.index({ userId: 1, statementId: 1, type: 1 });
 
 module.exports = mongoose.model("Transaction", TransactionSchema);

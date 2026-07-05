@@ -14,10 +14,19 @@ import TopMerchantsList from "../components/TopMerchantsList.jsx";
 import RecurringPaymentsList from "../components/RecurringPaymentsList.jsx";
 import LargestExpenseByMonth from "../components/LargestExpenseByMonth.jsx";
 import TransactionsTable from "../components/TransactionsTable.jsx";
+import UserMenu from "../components/UserMenu.jsx";
 import useMetrics from "../hooks/useMetrics.js";
 import { formatBankName } from "../utils/format.js";
 
-export default function DashboardPage({ statements, selectedIds, setSelectedIds, onUploadNew, onDeleteStatement }) {
+export default function DashboardPage({
+  statements,
+  selectedIds,
+  setSelectedIds,
+  onUploadNew,
+  onDeleteStatement,
+  user,
+  onLogout,
+}) {
   const [filters, setFilters] = useState({});
   const [tab, setTab] = useState("summary"); // "summary" | "transactions"
   const { metrics, loading } = useMetrics(selectedIds, filters);
@@ -47,7 +56,7 @@ export default function DashboardPage({ statements, selectedIds, setSelectedIds,
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <StatementSwitcher
               statements={statements}
               selectedIds={selectedIds}
@@ -73,6 +82,7 @@ export default function DashboardPage({ statements, selectedIds, setSelectedIds,
                 Transactions
               </button>
             </div>
+            <UserMenu user={user} onLogout={onLogout} />
           </div>
         </div>
       </header>

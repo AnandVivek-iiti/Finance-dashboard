@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { fetchStatements, deleteStatement as apiDeleteStatement } from "../utils/api.js";
 
-export default function useStatements() {
+export default function useStatements({ enabled = true } = {}) {
   const [statements, setStatements] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState(null);
 
   const refresh = useCallback(async () => {
@@ -20,8 +20,9 @@ export default function useStatements() {
   }, []);
 
   useEffect(() => {
+    if (!enabled) return;
     refresh();
-  }, [refresh]);
+  }, [enabled, refresh]);
 
   const removeStatement = useCallback(
     async (id) => {

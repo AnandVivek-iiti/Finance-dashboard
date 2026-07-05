@@ -117,7 +117,7 @@ function stripCrDrSuffix(raw) {
  * so openingBalancePaise stays null in that fallback path).
  *
  * Also reports stopRowIndex so the caller can stop walking rows as
- * transactions once the summary block starts — otherwise its own rows
+ * transactions once the summary block starts - otherwise its own rows
  * (and the "Statement Summary : ... to ..." label row above it) get
  * treated as unparseable transaction rows and pollute parseErrors with
  * noise that isn't a real parse problem.

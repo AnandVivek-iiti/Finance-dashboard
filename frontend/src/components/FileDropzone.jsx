@@ -43,7 +43,7 @@ export default function FileDropzone({ onFileSelected, disabled }) {
           Drop your statement here, or click to browse
         </p>
       </div>
-      <div className="text-xs text-ink-dim">.XLS, .XLSX, or .PDF — max 25MB</div>
+      <div className="text-xs text-ink-dim">.XLS, .XLSX, or .PDF - max 25MB</div>
       <input
         ref={inputRef}
         type="file"

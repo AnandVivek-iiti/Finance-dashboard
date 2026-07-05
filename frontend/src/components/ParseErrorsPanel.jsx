@@ -31,7 +31,7 @@ export default function ParseErrorsPanel({ statements, selectedIds }) {
         onClick={() => setOpen((o) => !o)}
         className="text-left text-[13px] font-semibold text-warn"
       >
-        {open ? "▾" : "▸"} {totalCount} row{totalCount === 1 ? "" : "s"} flagged during parsing — click to review
+        {open ? "▾" : "▸"} {totalCount} row{totalCount === 1 ? "" : "s"} flagged during parsing - click to review
       </button>
 
       {open && (

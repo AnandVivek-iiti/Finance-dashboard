@@ -46,7 +46,7 @@ export default function PasswordPrompt({ filename, wrongPassword, onSubmit, onCa
           </label>
 
           <p className="text-[11px] leading-snug text-ink-dim">
-            This is only used to open the file for this upload — it isn't saved anywhere.
+            This is only used to open the file for this upload - it isn't saved anywhere.
           </p>
 
           <div className="mt-1 flex gap-2">

@@ -1,10 +1,13 @@
 import { useState } from "react";
 import UploadPage from "./pages/UploadPage.jsx";
 import DashboardPage from "./pages/DashboardPage.jsx";
+import LandingPage from "./pages/LandingPage.jsx";
 import useStatements from "./hooks/useStatements.js";
+import useAuth from "./hooks/useAuth.js";
 
 export default function App() {
-  const { statements, loading, refresh, removeStatement } = useStatements();
+  const { user, loading: authLoading, login, logout } = useAuth();
+  const { statements, loading, refresh, removeStatement } = useStatements({ enabled: !!user });
   const [view, setView] = useState("upload"); // "upload" | "dashboard"
   const [selectedIds, setSelectedIds] = useState([]);
 
@@ -24,25 +27,33 @@ export default function App() {
     setSelectedIds((prev) => prev.filter((sid) => sid !== id));
   };
 
-  if (view === "dashboard" && selectedIds.length > 0) {
-    return (
-      <DashboardPage
-        statements={statements}
-        selectedIds={selectedIds}
-        setSelectedIds={setSelectedIds}
-        onUploadNew={() => setView("upload")}
-        onDeleteStatement={handleDeleteStatement}
-      />
-    );
+  if (authLoading) {
+    return <div className="min-h-screen bg-canvas" />;
   }
 
-  return (
+  if (!user) {
+    return <LandingPage onLogin={login} />;
+  }
+
+  return view === "dashboard" && selectedIds.length > 0 ? (
+    <DashboardPage
+      statements={statements}
+      selectedIds={selectedIds}
+      setSelectedIds={setSelectedIds}
+      onUploadNew={() => setView("upload")}
+      onDeleteStatement={handleDeleteStatement}
+      user={user}
+      onLogout={logout}
+    />
+  ) : (
     <UploadPage
       statements={statements}
       loading={loading}
       onUploadComplete={handleUploadComplete}
       onViewStatements={handleViewStatements}
       onDeleteStatement={handleDeleteStatement}
+      user={user}
+      onLogout={logout}
     />
   );
 }

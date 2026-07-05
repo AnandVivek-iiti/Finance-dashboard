@@ -65,7 +65,7 @@ export default function KpiCards({ metrics, loading }) {
       <Card
         label="Lowest balance point"
         value={metrics.lowestBalancePoint ? formatRupees(metrics.lowestBalancePoint.balancePaise, { decimals: 2 }) : "unavailable"}
-        sub={metrics.lowestBalancePoint ? `on ${formatDate(metrics.lowestBalancePoint.date)} — risk period` : null}
+        sub={metrics.lowestBalancePoint ? `on ${formatDate(metrics.lowestBalancePoint.date)} - risk period` : null}
         tone="warn"
       />
       <Card

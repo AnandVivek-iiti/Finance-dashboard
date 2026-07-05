@@ -1,10 +1,19 @@
 import { useState, useRef, useEffect } from "react";
 import { Loader2, CheckCircle2, AlertTriangle } from "lucide-react";
 import FileDropzone from "../components/FileDropzone.jsx";
+import UserMenu from "../components/UserMenu.jsx";
 import { uploadStatement } from "../utils/api.js";
 import { formatRupees, formatBankName, formatDateHyphen } from "../utils/format.js";
 
-export default function UploadPage({ statements, loading, onUploadComplete, onViewStatements, onDeleteStatement }) {
+export default function UploadPage({
+  statements,
+  loading,
+  onUploadComplete,
+  onViewStatements,
+  onDeleteStatement,
+  user,
+  onLogout,
+}) {
   const [phase, setPhase] = useState("idle"); // idle | uploading | processing | error
   const [progress, setProgress] = useState(0);
   const [errorMessage, setErrorMessage] = useState("");
@@ -62,9 +71,12 @@ export default function UploadPage({ statements, loading, onUploadComplete, onVi
   return (
     <div className="min-h-screen bg-canvas">
       <header className="border-b border-border bg-surface">
-        <div className="mx-auto flex max-w-4xl items-center gap-2.5 px-4 py-5">
-          <LedgerMark />
-          <span className="font-display text-[17px] font-bold text-ink">Statement Analysis</span>
+        <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-5">
+          <div className="flex items-center gap-2.5">
+            <LedgerMark />
+            <span className="font-display text-[17px] font-bold text-ink">Statement Analysis</span>
+          </div>
+          <UserMenu user={user} onLogout={onLogout} />
         </div>
       </header>
 
@@ -73,7 +85,7 @@ export default function UploadPage({ statements, loading, onUploadComplete, onVi
           <div className="mb-7 text-center">
             <h1 className="font-display text-3xl font-bold text-ink">Understand your spending in one upload</h1>
             <p className="mt-2 text-sm text-ink-muted">
-              Upload a bank statement (.xls, .xlsx, or .pdf) and get a full visual breakdown — no
+              Upload a bank statement (.xls, .xlsx, or .pdf) and get a full visual breakdown - no
               spreadsheets, no manual work. Every figure traces back to an actual row in your statement.
             </p>
           </div>
@@ -123,7 +135,7 @@ export default function UploadPage({ statements, loading, onUploadComplete, onVi
               <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-accent" />
               <span>
                 Parsed {result.transactionCount} transactions successfully. {result.parseErrorCount} row(s) couldn't
-                be verified and were excluded — you'll see details on the dashboard.
+                be verified and were excluded - you'll see details on the dashboard.
               </span>
             </div>
           )}

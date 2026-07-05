@@ -2,8 +2,8 @@ const mongoose = require("mongoose");
 const Transaction = require("../models/Transaction");
 const { computeMetrics } = require("../services/metricsEngine");
 
-function buildFilter(query) {
-  const filter = {};
+function buildFilter(query, userId) {
+  const filter = { userId };
 
   if (query.statementIds) {
     const ids = String(query.statementIds)
@@ -43,7 +43,7 @@ function buildFilter(query) {
 }
 
 async function getMetrics(req, res) {
-  const filter = buildFilter(req.query);
+  const filter = buildFilter(req.query, req.userId);
   const txns = await Transaction.find(filter).lean();
   const metrics = computeMetrics(txns);
 

@@ -12,8 +12,8 @@ const { normalizeTable } = require("../parsers/tableParser");
 
 const PASSWORD_CODES = ["PASSWORD_REQUIRED", "INVALID_PASSWORD"];
 
-async function loadOverridesMap() {
-  const overrides = await CategoryOverride.find({}).lean();
+async function loadOverridesMap(userId) {
+  const overrides = await CategoryOverride.find({ userId }).lean();
   const map = new Map();
   for (const o of overrides) {
     map.set(o.normalizedRemarks, { category: o.category, merchantOrSource: o.merchantOrSource });
@@ -22,10 +22,11 @@ async function loadOverridesMap() {
 }
 
 
-async function checkContinuity(accountNumber, periodStart, openingBalancePaise, filename) {
+async function checkContinuity(userId, accountNumber, periodStart, openingBalancePaise, filename) {
   if (!accountNumber || openingBalancePaise === null) return null;
 
   const previous = await Statement.findOne({
+    userId,
     accountNumber,
     status: "ready",
     periodEnd: { $ne: null, $lt: periodStart || new Date(8640000000000000) },
@@ -60,6 +61,7 @@ async function handleUpload(req, res) {
   const originalName = req.file.originalname;
   const ext = path.extname(originalName).toLowerCase();
   const password = req.body && req.body.password ? String(req.body.password) : null;
+  const userId = req.userId;
 
   try {
     let rows;
@@ -71,7 +73,7 @@ async function handleUpload(req, res) {
       throw new Error(`Unsupported file type "${ext}". Upload a .xls, .xlsx, or .pdf bank statement.`);
     }
 
-    const overridesMap = await loadOverridesMap();
+    const overridesMap = await loadOverridesMap(userId);
     const result = normalizeTable(rows, overridesMap);
 
     if (result.error) {
@@ -85,6 +87,7 @@ async function handleUpload(req, res) {
     }
 
     const continuityWarning = await checkContinuity(
+      userId,
       metadata.accountNumber,
       metadata.periodStart,
       openingBalancePaise,
@@ -92,6 +95,7 @@ async function handleUpload(req, res) {
     );
 
     const statement = await Statement.create({
+      userId,
       filename: originalName,
       status: "ready",
       bankProfile: bankProfileId,
@@ -109,11 +113,11 @@ async function handleUpload(req, res) {
     });
 
     await Transaction.insertMany(
-      transactions.map((t) => ({ ...t, statementId: statement._id }))
+      transactions.map((t) => ({ ...t, userId, statementId: statement._id }))
     );
 
     if (parseErrors.length > 0) {
-      await ParseError.insertMany(parseErrors.map((e) => ({ ...e, statementId: statement._id })));
+      await ParseError.insertMany(parseErrors.map((e) => ({ ...e, userId, statementId: statement._id })));
     }
 
     res.status(201).json({

@@ -2,6 +2,8 @@ const mongoose = require("mongoose");
 
 const StatementSchema = new mongoose.Schema(
   {
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
+
     filename: { type: String, required: true },
     bankProfile: { type: String, default: "unknown" }, // e.g. "canara_bank"
     accountNumber: { type: String, default: "" },
