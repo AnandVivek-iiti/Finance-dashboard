@@ -1,0 +1,2 @@
+pdfplumber>=0.11.0
+msoffcrypto-tool>=5.4.2
