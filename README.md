@@ -26,7 +26,9 @@ finance-dashboard/
 ├── frontend/
 │   ├── src/pages/UploadPage.jsx, DashboardPage.jsx
 │   ├── src/components/        # KpiCards, charts, FilterBar, StatementSwitcher, etc.
-│   └── src/hooks/              # useStatements, useMetrics
+│   ├── src/hooks/              # useStatements, useMetrics
+│   └── .env.example            # VITE_API_BASE (set at build time)
+├── render.yaml                 # Render Blueprint — deploys backend + frontend together
 └── README.md (this file)
 ```
 
@@ -169,10 +171,80 @@ bank-agnostic.
   machine, put it behind basic auth or a login before exposing real account
   data.
 
-## 9. Production build
+## 9. Production build (local)
 
 ```bash
 cd frontend && npm run build   # outputs to frontend/dist/
 ```
 Serve `frontend/dist/` behind any static host, and set `VITE_API_BASE` at
 build time to point at your deployed API.
+
+## 10. Deploying to Render (backend + frontend)
+
+The repo ships with a `render.yaml` Blueprint that deploys both services in
+one go. The backend is a Node **Web Service** that also installs the Python
+PDF-parsing dependencies from `backend/scripts/requirements.txt` during its
+build step; the frontend is a **Static Site** built from `frontend/`.
+
+### Option A — one-click with the Blueprint
+
+1. Push this repo to GitHub/GitLab.
+2. In the Render dashboard: **New → Blueprint**, pick this repo. Render reads
+   `render.yaml` and creates both services automatically.
+3. Render will pause and ask for the env vars marked `sync: false` — fill in:
+   - **finance-dashboard-backend**: `MONGO_URI` (your Atlas connection
+     string), `FRONTEND_URL` (leave blank for the first deploy, see step 5)
+   - **finance-dashboard-frontend**: `VITE_API_BASE` (leave blank for the
+     first deploy, see step 5)
+4. Deploy. Once both services are live, note their URLs, e.g.:
+   - Backend: `https://finance-dashboard-backend.onrender.com`
+   - Frontend: `https://finance-dashboard-frontend.onrender.com`
+5. Go back into each service's **Environment** tab and set the values that
+   depend on each other, then trigger a redeploy of each:
+   - Backend `FRONTEND_URL` = the frontend URL from step 4
+   - Frontend `VITE_API_BASE` = `<backend URL>/api` (e.g.
+     `https://finance-dashboard-backend.onrender.com/api`) — this only takes
+     effect on a fresh build, since Vite bakes it in at build time.
+
+### Option B — manual setup (no Blueprint)
+
+**Backend (Web Service):**
+- Root directory: `backend`
+- Runtime: Node
+- Build command: `npm install && pip3 install -r scripts/requirements.txt --break-system-packages`
+  — this is the step that installs `pdfplumber` and `msoffcrypto-tool` (the
+  `scripts/requirements.txt` file) into Render's build image; nothing else
+  is needed to "deploy" that file, it just needs to be picked up by `pip3`
+  during the build.
+- Start command: `npm start`
+- Environment variables: `MONGO_URI`, `FRONTEND_URL`, `PYTHON_BIN=python3`, `NODE_ENV=production`
+
+**Frontend (Static Site):**
+- Root directory: `frontend`
+- Build command: `npm install && npm run build`
+- Publish directory: `dist`
+- Environment variables: `VITE_API_BASE=<backend URL>/api`
+- Add a rewrite rule `/*` → `/index.html` (single-page app fallback)
+
+### Database
+
+Use a free [MongoDB Atlas](https://www.mongodb.com/atlas) cluster for
+`MONGO_URI` — Render's free tier has no persistent disk suitable for running
+MongoDB yourself. Whitelist `0.0.0.0/0` in Atlas's network access (or
+Render's outbound IPs) so the backend can connect.
+
+### Notes specific to this stack
+
+- **Uploaded files never persist**: `uploadController.js` deletes the
+  temporary file from `backend/uploads/` immediately after parsing (success
+  or failure), so Render's ephemeral filesystem is fine — no paid persistent
+  disk is required.
+- **CORS is locked down in production**: `server.js` only allows the
+  origin(s) listed in `FRONTEND_URL`. If you skip setting it, the API falls
+  back to allowing all origins (fine for local dev, not recommended for a
+  public deployment).
+- **Free-tier cold starts**: Render's free web services spin down after
+  inactivity; the first request after idling can take 30-60s while the
+  instance (and the Mongo connection) wake up.
+- Add authentication in front of this app before deploying with real
+  statement data - see the "Known limitations" section above.

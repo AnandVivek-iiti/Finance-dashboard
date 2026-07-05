@@ -11,7 +11,25 @@ const transactionsRoutes = require("./routes/transactions");
 
 const app = express();
 
-app.use(cors());
+app.set("trust proxy", 1);
+
+const allowedOrigins = (process.env.FRONTEND_URL || "")
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+
+app.use(
+  cors(
+    allowedOrigins.length > 0
+      ? {
+          origin: (origin, cb) => {
+            if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
+            return cb(new Error(`Origin ${origin} not allowed by CORS`));
+          },
+        }
+      : undefined
+  )
+);
 app.use(express.json());
 
 app.get("/", (req, res) => {
