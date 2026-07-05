@@ -47,6 +47,7 @@ async function readXlsToRows(filePath, password = null) {
       }[result.error] || result.detail || "Failed to open this Excel file."
     );
     err.code = result.error;
+    err.expose = true; // crafted, user-actionable message -- no raw internals in it
     throw err;
   }
 

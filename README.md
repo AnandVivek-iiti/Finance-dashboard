@@ -10,23 +10,31 @@ finance-dashboard/
 ├── backend/
 │   ├── bankProfiles/        # Per-bank header detection + column mapping
 │   │   ├── canara.js        #   Canara Bank profile (used for your statement)
+│   │   ├── sbi.js           #   State Bank of India profile
 │   │   ├── generic.js       #   Fallback for other banks
 │   │   └── index.js         #   Tries each profile, first match wins
 │   ├── parsers/
-│   │   ├── xlsParser.js      # .xls/.xlsx -> raw 2D row array (SheetJS)
-│   │   ├── pdfParser.js      # .pdf -> raw 2D row array (via Python/pdfplumber)
+│   │   ├── xlsParser.js      # .xls/.xlsx -> raw 2D row array (SheetJS + msoffcrypto for passwords)
+│   │   ├── pdfParser.js      # .pdf -> raw 2D row array (pdfplumber; falls back to OCR if no text/tables found)
 │   │   ├── tableParser.js    # raw rows -> normalized transactions (the core engine)
 │   │   ├── categorizer.js    # rule-based categorization + merchant extraction
-│   │   └── dateParser.js     # multi-format date parsing
-│   ├── scripts/pdf_extract.py  # pdfplumber table extractor, called via child_process
-│   ├── models/                # Statement, Transaction, ParseError, CategoryOverride
-│   ├── services/metricsEngine.js  # computes every dashboard metric from transactions
-│   ├── controllers/, routes/, middleware/
+│   │   ├── dateParser.js     # multi-format date parsing
+│   │   └── pythonRuntime.js  # resolves which `python`/`python3` binary to shell out to
+│   ├── scripts/
+│   │   ├── pdf_extract.py       # pdfplumber table extractor, called via child_process
+│   │   ├── decrypt_office.py    # checks/decrypts password-protected .xls/.xlsx via msoffcrypto-tool
+│   │   └── requirements.txt     # pdfplumber + msoffcrypto-tool, installed via pip
+│   ├── services/
+│   │   ├── metricsEngine.js     # computes every dashboard metric from transactions
+│   │   └── groqOcrService.js  # OCR fallback for scanned/image-only PDFs (poppler + Groq API)
+│   ├── models/                # Statement, Transaction, ParseError, CategoryOverride, User
+│   ├── middleware/
+│   │   ├── requireAuth.js         # session cookie -> req.userId, else 401
+│   │   ├── errorHandler.js        # sanitizes all errors before they reach the client (see below)
+│   │   ├── validateFileSignature.js  # checks uploaded file's magic bytes match its extension
+│   │   └── security.js            # helmet, rate limiting, HPP, mongo-sanitize, XHR-header CSRF guard
+│   ├── controllers/, routes/
 │   └── server.js
-│   ├── models/User.js          # Google-authenticated account record
-│   ├── middleware/requireAuth.js  # session cookie -> req.userId, else 401
-│   ├── controllers/authController.js, routes/auth.js
-│   └── utils/jwt.js            # signs/verifies the app's own session JWT
 ├── frontend/
 │   ├── src/pages/LandingPage.jsx  # public, signed-out entry point (Google button)
 │   ├── src/pages/UploadPage.jsx, DashboardPage.jsx
@@ -50,6 +58,30 @@ finance-dashboard/
   time of writing, so `pdfParser.js` shells out to a small Python script
   (`scripts/pdf_extract.py`) via `child_process`. This is the one place the
   stack isn't pure Node, called out here rather than hidden.
+- **Groq OCR fallback** (`services/groqOcrService.js`) for scanned or
+  image-only PDF statements that have no selectable text/table at all: each
+  page is rasterized to a PNG with poppler's `pdftoppm`, then sent to a
+  Groq vision model to extract the same row shape the text-based parser
+  produces. This only runs when pdfplumber genuinely finds nothing - a
+  normal text-based PDF never touches it, and it's fully optional (disabled
+  if `GROQ_API_KEY` isn't set; the upload is then rejected with a clear
+  message instead of silently failing).
+- **Security middleware** (`middleware/security.js`): Helmet for standard
+  HTTP security headers, `express-rate-limit` (separate, tighter limits on
+  auth and upload endpoints than general API traffic), `express-mongo-sanitize`
+  against NoSQL injection, `hpp` against HTTP parameter pollution, and a
+  custom `X-Requested-With` header check as a lightweight CSRF guard on the
+  cookie-based session (see the comment in `security.js` for why a full CSRF
+  token library isn't needed here).
+- **Centralized error sanitization** (`middleware/errorHandler.js`): every
+  route is wrapped in `asyncHandler`, so any thrown/rejected error - a bad
+  `:id` param, a DB hiccup, an unexpected bug - ends up here. Only errors
+  explicitly marked as safe/crafted for the user (bad password, unsupported
+  file type, missing OCR config, etc.) are ever sent to the client as-is;
+  everything else is logged in full (message + stack) to the server console
+  and the client gets a generic "something went wrong" message instead, so
+  internal details (stack traces, DB errors, file paths, model/field names)
+  never leak to the browser.
 
 ## Authentication
 
@@ -99,13 +131,33 @@ it behaves.
 ## 1. Prerequisites
 
 - Node.js 18+
-- Python 3 with `pdfplumber` installed (only needed if you'll upload PDFs):
+- Python 3 with the parsing dependencies installed (only needed if you'll
+  upload `.pdf` or password-protected `.xls`/`.xlsx` files):
   ```bash
-  pip install pdfplumber --break-system-packages
+  pip install -r backend/scripts/requirements.txt --break-system-packages
+  ```
+  (installs `pdfplumber` for PDF table extraction and `msoffcrypto-tool` for
+  decrypting password-protected Excel files.)
+- **poppler-utils** (only needed for scanned/image-only PDFs, which go
+  through the OCR fallback): provides the `pdftoppm` binary used to
+  rasterize pages before sending them to Groq.
+  ```bash
+  sudo apt-get install poppler-utils   # Debian/Ubuntu
+  brew install poppler                 # macOS
   ```
 - A MongoDB instance - local (`mongod` on `localhost:27017`) or a free
   [MongoDB Atlas](https://www.mongodb.com/atlas) cluster.
 - A Google OAuth Client ID (see Google Cloud setup above).
+- (Optional) A **Groq API key** if you want OCR support for scanned PDF
+  statements - get one from [Groq Console](https://console.groq.com/keys).
+  Without it, a scanned PDF upload is rejected with a clear message rather
+  than silently failing; text-based PDFs and Excel files work fine without it.
+  A `429` from Groq is retried automatically with a wait (parsed from Groq's
+  own "try again in Xs" message) rather than failing the upload outright.
+  Multiple `GROQ_API_KEY` values only help against rate limits if they
+  belong to *different* Groq orgs/projects - keys in the same org/project
+  share one tokens-per-minute budget, so rotating between them doesn't
+  bypass a 429.
 
 **Backend env vars** (`backend/.env`, copy from `.env.example`):
 
@@ -117,6 +169,13 @@ it behaves.
 | `NODE_ENV`          | no       | `development` or `production`.                                        |
 | `FRONTEND_URL`      | yes      | Comma-separated allowed origins for CORS (must match exactly, no trailing slash). |
 | `GOOGLE_CLIENT_ID`  | yes      | From the Google Cloud setup step above.                               |
+| `GROQ_API_KEY`      | no       | Enables OCR (scanned/image-only PDFs) and the AI table-remapping fallback for unrecognized bank formats. Accepts a single key or a comma-separated list for rotation across rate limits. Omit to disable both (other uploads are unaffected). |
+| `GROQ_OCR_MODEL`    | no       | Defaults to `qwen/qwen3.6-27b` (one of Groq's two current vision-capable models). Override if Groq's lineup changes. |
+| `GROQ_FALLBACK_MODEL` | no     | Defaults to `openai/gpt-oss-120b` (text-only, no vision needed for this step). Override to use a different Groq model for the unrecognized-header table remap. |
+| `GROQ_OCR_MAX_TOKENS` | no    | Defaults to `4000`. Lower this if you hit a 413 "tokens per minute" error on a free/on_demand Groq tier. |
+| `GROQ_FALLBACK_MAX_TOKENS` | no | Defaults to `3000`. Same purpose as above, for the table-remapping fallback. |
+| `GROQ_FALLBACK_ROWS_PER_CHUNK` | no | Defaults to `40`. Rows are sent to the AI fallback in batches of this size (rather than all at once) so large statements stay under a low TPM cap. If a chunk still exceeds `GROQ_FALLBACK_MAX_TOKENS` mid-response (e.g. unusually long remarks), it's automatically split in half and retried rather than failing the whole upload. |
+| `GROQ_FALLBACK_CHUNK_DELAY_MS` | no | Defaults to `500`. Pause between chunk requests to the AI fallback, skipped before the first chunk. |
 | `JWT_SECRET`        | yes      | Generate with `openssl rand -base64 32`.                               |
 | `COOKIE_DOMAIN`     | no       | Only if sharing the cookie across subdomains of one parent domain.     |
 
@@ -150,14 +209,21 @@ Google, and the upload flow appears automatically.
 
 ## 4. How a file becomes a dashboard (the accuracy pipeline)
 
-1. **Read raw rows.** `.xls`/`.xlsx` via SheetJS; `.pdf` via the pdfplumber
+1. **Read raw rows.** `.xls`/`.xlsx` via SheetJS (password-protected files
+   are decrypted first via `msoffcrypto-tool`); `.pdf` via the pdfplumber
    Python helper. Both produce the same shape: a plain 2D array of cells.
+   If a PDF has no selectable text/table at all (a scanned/image-only
+   statement), it automatically falls back to the Groq OCR service
+   (`services/groqOcrService.js`) instead of being rejected - each page is
+   rasterized and read by a Groq vision model, producing the same row shape.
+   This step is skipped entirely, with no behavior change, if `GROQ_API_KEY`
+   isn't set.
 2. **Detect the bank & find the header row.** `bankProfiles/index.js` tries
-   each profile's header-matching rules against the raw rows. Your Canara
-   Bank export is matched by `canara.js` (it even tolerates the bank's own
-   "Trasnaction ID" typo). Unrecognized layouts fall back to `generic.js`;
-   if nothing matches at all, the upload is rejected with a clear message
-   instead of guessing a column layout.
+   each profile's header-matching rules against the raw rows. Canara Bank
+   and SBI exports are matched by `canara.js`/`sbi.js` (the Canara profile
+   even tolerates the bank's own "Trasnaction ID" typo). Unrecognized
+   layouts fall back to `generic.js`; if nothing matches at all, the upload
+   is rejected with a clear message instead of guessing a column layout.
 3. **Normalize every row** (`tableParser.js`) into:
    ```json
    {
@@ -232,8 +298,14 @@ bank-agnostic.
 
 ## 8. Known limitations (documented, not hidden)
 
-- PDF parsing needs a text-based table (via pdfplumber). Scanned/image-only
-  PDF statements would need OCR, which isn't implemented.
+- Scanned/image-only PDF statements are handled via the Groq OCR fallback,
+  but that requires `GROQ_API_KEY` to be set (see Prerequisites); without
+  it, such a PDF is rejected with a clear message rather than misread. OCR
+  accuracy also depends on scan quality - each response includes a
+  confidence score, and low-confidence pages are still worth spot-checking
+  against the original statement.
+- Bank profiles currently cover Canara Bank and SBI, with a `generic.js`
+  fallback for other layouts (see "Adding support for another bank" below).
 - Merchant-name extraction is rule-based pattern matching on remarks text,
   not NLP - good enough for "Top Merchants" but won't be perfect on every
   bank's remarks format.
@@ -243,7 +315,32 @@ bank-agnostic.
   fully isolated from every other account's; see the Authentication
   section above.
 
-## 9. Production build
+## 9. Error handling & logging
+
+The API never sends internal error details (stack traces, DB errors, raw
+subprocess output) to the browser - see `middleware/errorHandler.js`. If
+something goes wrong:
+
+- The **full error** (message + stack) is always logged to the backend's
+  console/server logs, tagged with the request method and URL.
+- The **client** only ever gets one of: a crafted, actionable message for
+  errors we expect (wrong password, unsupported file type, malformed ID,
+  OCR not configured, etc.), or a generic "Something went wrong on our end"
+  message for anything unexpected.
+- When debugging a failed upload or request, check the backend's console
+  output (or `npm run dev`'s terminal) rather than the browser - that's
+  where the real error always is.
+
+## 10. Running tests
+
+```bash
+cd backend
+npm test              # vitest run - single run
+npm run test:watch    # vitest, re-runs on file changes
+npm run test:coverage # vitest run --coverage
+```
+
+## 11. Production build
 
 ```bash
 cd frontend && npm run build   # outputs to frontend/dist/
@@ -251,22 +348,25 @@ cd frontend && npm run build   # outputs to frontend/dist/
 Serve `frontend/dist/` behind any static host, and set `VITE_API_BASE` at
 build time to point at your deployed API.
 
-## 10. Deploying to Render
+## 12. Deploying to Render
 
 Deploy as **two separate Render services** - a web service for the backend,
 a static site for the frontend:
 
-1. **Backend (Web Service)**
+1. **Backend (Web Service)** - see `render.yaml` for the exact config this
+   project ships with (Render's "Blueprint" deploy can apply it directly).
    - Root directory: `backend`
-   - Build command: `npm install`
+   - Build command: `apt-get update && apt-get install -y poppler-utils && npm install && pip install -r scripts/requirements.txt --break-system-packages`
+     (poppler-utils is only needed for the OCR fallback; the pip install
+     covers both `pdfplumber` and `msoffcrypto-tool`).
    - Start command: `npm start`
+   - Health check path: `/`
    - Environment variables: `MONGO_URI`, `PORT` (Render sets this
-     automatically), `PYTHON_BIN`, `NODE_ENV=production`, `FRONTEND_URL`
-     (your deployed static site URL, e.g.
+     automatically), `PYTHON_BIN=python`, `NODE_ENV=production`,
+     `FRONTEND_URL` (your deployed static site URL, e.g.
      `https://finance-dashboard-frontend.onrender.com`), `GOOGLE_CLIENT_ID`,
-     `JWT_SECRET`, and `COOKIE_DOMAIN` if you're using one.
-   - If you'll accept PDF uploads, add a build step (or a `render-build.sh`)
-     that installs `pdfplumber` for the Python runtime Render provisions.
+     `GROQ_API_KEY` (optional - for scanned-PDF OCR and the unrecognized-format AI fallback), `JWT_SECRET`,
+     and `COOKIE_DOMAIN` if you're using one.
 
 2. **Frontend (Static Site)**
    - Root directory: `frontend`

@@ -9,6 +9,7 @@ const CategoryOverride = require("../models/CategoryOverride");
 const { readXlsToRows } = require("../parsers/xlsParser");
 const { readPdfToRows } = require("../parsers/pdfParser");
 const { normalizeTable } = require("../parsers/tableParser");
+const { reinterpretRowsViaAI } = require("../services/aiFallbackParser");
 
 const PASSWORD_CODES = ["PASSWORD_REQUIRED", "INVALID_PASSWORD"];
 
@@ -70,20 +71,54 @@ async function handleUpload(req, res) {
     } else if (ext === ".pdf") {
       rows = await readPdfToRows(filePath, password);
     } else {
-      throw new Error(`Unsupported file type "${ext}". Upload a .xls, .xlsx, or .pdf bank statement.`);
+      const err = new Error(`Unsupported file type "${ext}". Upload a .xls, .xlsx, or .pdf bank statement.`);
+      err.expose = true;
+      throw err;
     }
 
     const overridesMap = await loadOverridesMap(userId);
-    const result = normalizeTable(rows, overridesMap);
+    let result = normalizeTable(rows, overridesMap);
+    let aiFallback = null;
+
+    // Fall back to AI remapping both when no profile's header matched at all,
+    // AND when a profile matched the header but the row data still yielded
+    // zero usable transactions (e.g. header looked right but columns/format
+    // didn't actually fit the schema).
+    const needsAiFallback = result.error || (result.transactions && result.transactions.length === 0);
+
+    if (needsAiFallback && process.env.GROQ_API_KEY) {
+      let aiRows;
+      try {
+        aiRows = await reinterpretRowsViaAI(rows);
+      } catch (aiErr) {
+        console.error(`[upload] AI table fallback failed for user ${userId}:`, aiErr.stack || aiErr.message);
+        aiRows = null;
+      }
+
+      if (aiRows) {
+        aiFallback = { used: true, confidence: aiRows.aiFallbackConfidence, truncated: aiRows.aiFallbackTruncated };
+        result = normalizeTable(aiRows, overridesMap);
+      }
+    }
 
     if (result.error) {
-      throw new Error(result.error);
+      const err = new Error(result.error);
+      err.expose = true;
+      throw err;
     }
 
     const { metadata, transactions, parseErrors, openingBalancePaise, closingBalancePaise, bankProfileId } = result;
 
     if (transactions.length === 0) {
-      throw new Error("No valid transactions could be parsed from this file. See parse errors for details.");
+      const errorCounts = {};
+      for (const pe of parseErrors) errorCounts[pe.errorType] = (errorCounts[pe.errorType] || 0) + 1;
+      console.error(
+        `[upload] zero transactions for user ${userId} (bankProfile=${bankProfileId}, aiFallback=${!!aiFallback}). ` +
+          `Parse error breakdown: ${JSON.stringify(errorCounts)}. Sample rows: ${JSON.stringify(parseErrors.slice(0, 3))}`
+      );
+      const err = new Error("No valid transactions could be parsed from this file. See parse errors for details.");
+      err.expose = true;
+      throw err;
     }
 
     const continuityWarning = await checkContinuity(
@@ -126,10 +161,26 @@ async function handleUpload(req, res) {
       transactionCount: transactions.length,
       parseErrorCount: parseErrors.length,
       continuityWarning,
+
+      ocrUsed: rows.ocrUsed || false,
+      ocrConfidence: rows.ocrUsed ? rows.ocrConfidence : null,
+      aiFallbackUsed: aiFallback ? aiFallback.used : false,
+      aiFallbackConfidence: aiFallback ? aiFallback.confidence : null,
+      aiFallbackTruncated: aiFallback ? aiFallback.truncated : false,
     });
   } catch (err) {
-    const status = PASSWORD_CODES.includes(err.code) ? 401 : 422;
-    res.status(status).json({ error: err.message, code: err.code || null });
+
+    console.error(`[upload] failed for user ${userId}:`, err.stack || err.message);
+
+    if (PASSWORD_CODES.includes(err.code)) {
+      return res.status(401).json({ error: err.message, code: err.code });
+    }
+    if (err.expose) {
+      return res.status(422).json({ error: err.message, code: err.code || null });
+    }
+    res.status(500).json({
+      error: "We couldn't process this file. Please check that it's a valid bank statement and try again.",
+    });
   } finally {
     fs.unlink(filePath, () => {});
   }

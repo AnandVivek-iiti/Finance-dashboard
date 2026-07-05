@@ -123,6 +123,18 @@ export default function UploadPage({
             </div>
           )}
 
+          {result && phase !== "error" && phase !== "idle" && (result.ocrUsed || result.aiFallbackUsed) && (
+            <div className="mt-4 flex items-start gap-2 rounded-lg border border-warn/30 bg-warn-soft px-4 py-3 text-sm text-warn">
+              <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+              <span>
+                {result.ocrUsed
+                  ? `This PDF had no selectable text, so it was read with AI-assisted OCR instead (confidence ${Math.round((result.ocrConfidence ?? 0) * 100)}%).`
+                  : `This bank's export format wasn't recognized, so an AI fallback re-mapped the table (confidence ${Math.round((result.aiFallbackConfidence ?? 0) * 100)}%)${result.aiFallbackTruncated ? ", and only the first part of a very long statement was read" : ""}.`}{" "}
+                Double-check the parsed transactions and flagged rows before relying on the totals.
+              </span>
+            </div>
+          )}
+
           {result && phase !== "error" && phase !== "idle" && result.continuityWarning?.warning && (
             <div className="mt-4 flex items-start gap-2 rounded-lg border border-warn/30 bg-warn-soft px-4 py-3 text-sm text-warn">
               <AlertTriangle size={16} className="mt-0.5 shrink-0" />

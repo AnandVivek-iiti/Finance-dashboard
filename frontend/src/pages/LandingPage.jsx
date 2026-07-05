@@ -15,7 +15,7 @@ const FAQS = [
   },
   {
     q: "What file formats can I upload?",
-    a: ".pdf, .xls, and .xlsx. PDFs must have text-based tables - scanned or photographed statements aren't supported yet, since there's no OCR.",
+    a: ".pdf, .xls, and .xlsx. Scanned or photographed PDFs, and spreadsheets with an unfamiliar bank's column layout, are handled by an AI-assisted fallback when one is configured on the server - otherwise text-based tables from known bank formats work best.",
   },
   {
     q: "Is my data private?",

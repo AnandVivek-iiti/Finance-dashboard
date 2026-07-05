@@ -2,13 +2,13 @@ const { parseStatementDate } = require("../parsers/dateParser");
 
 const COLUMN_MATCHERS = {
   date: (h) => /date/i.test(h),
-  transactionId: (h) => /actio/i.test(h) && /id/i.test(h),
+  transactionId: (h) => (/actio/i.test(h) && /id/i.test(h)) || /txn.{0,3}id/i.test(h) || /chq|cheque|ref.{0,3}no/i.test(h),
   withdrawal: (h) => /withdrawal/i.test(h),
   deposit: (h) => /deposit/i.test(h),
   balance: (h) => /balance/i.test(h),
   remarks: (h) => /remark/i.test(h),
 };
-const REQUIRED_HEADER_FIELDS = ["date", "transactionId", "withdrawal", "deposit", "balance", "remarks"];
+const REQUIRED_HEADER_FIELDS = ["date", "withdrawal", "deposit", "balance"];
 
 function cell(row, i) {
   return row && row[i] !== undefined && row[i] !== null ? String(row[i]).trim() : "";

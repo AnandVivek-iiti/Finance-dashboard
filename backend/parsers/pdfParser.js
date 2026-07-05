@@ -1,10 +1,11 @@
 const { execFile } = require("child_process");
 const path = require("path");
 const { resolvePythonBin } = require("./pythonRuntime");
+const { readPdfToRowsViaOcr } = require("../services/groqOcrService");
 
 const SCRIPT_PATH = path.join(__dirname, "..", "scripts", "pdf_extract.py");
 
-function readPdfToRows(filePath, password = null) {
+function readPdfToRowsViaPdfplumber(filePath, password) {
   return new Promise((resolve, reject) => {
     let pythonBin;
     try {
@@ -27,6 +28,10 @@ function readPdfToRows(filePath, password = null) {
             const e = new Error(parsedErr.error);
             if (parsedErr.passwordRequired) {
               e.code = parsedErr.wrongPassword ? "INVALID_PASSWORD" : "PASSWORD_REQUIRED";
+              e.expose = true; // crafted, user-actionable message -- no raw internals in it
+            }
+            if (parsedErr.needsOcr) {
+              e.code = "NEEDS_OCR"; // handled internally by readPdfToRows, never reaches the client
             }
             return reject(e);
           }
@@ -43,12 +48,24 @@ function readPdfToRows(filePath, password = null) {
           if (parsed.passwordRequired) {
             e.code = parsed.wrongPassword ? "INVALID_PASSWORD" : "PASSWORD_REQUIRED";
           }
+          if (parsed.needsOcr) {
+            e.code = "NEEDS_OCR";
+          }
           return reject(e);
         }
         resolve(parsed);
       }
     );
   });
+}
+
+async function readPdfToRows(filePath, password = null) {
+  try {
+    return await readPdfToRowsViaPdfplumber(filePath, password);
+  } catch (err) {
+    if (err.code !== "NEEDS_OCR") throw err;
+    return readPdfToRowsViaOcr(filePath, password);
+  }
 }
 
 module.exports = { readPdfToRows };

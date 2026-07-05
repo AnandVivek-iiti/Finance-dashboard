@@ -64,6 +64,19 @@ def main():
                 except Exception:
                     emit({"error": "INVALID_PASSWORD"})
 
+            with open(out_path, "rb") as check:
+                header = check.read(8)
+
+            is_zip = header.startswith(b"PK\x03\x04")
+            is_ole = header.startswith(b"\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1")
+            if not (is_zip or is_ole):
+                try:
+                    import os
+                    os.remove(out_path)
+                except OSError:
+                    pass
+                emit({"error": "INVALID_PASSWORD"})
+
             emit({"encrypted": True, "decryptedPath": out_path})
     except Exception as e:
         emit({"error": "UNREADABLE_FILE", "detail": str(e)})

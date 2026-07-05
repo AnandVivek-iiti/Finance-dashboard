@@ -5,7 +5,7 @@ services:
     runtime: node
     rootDir: backend
     plan: free
-    buildCommand: npm install && pip install -r scripts/requirements.txt --break-system-packages
+    buildCommand: apt-get update && apt-get install -y poppler-utils && npm install && pip install -r scripts/requirements.txt --break-system-packages
     startCommand: npm start
     healthCheckPath: /
     envVars:
@@ -17,6 +17,8 @@ services:
         sync: false        # set manually in Render dashboard (Atlas connection string)
       - key: FRONTEND_URL
         sync: false        # set to the frontend's Render URL after it's created
+      - key: GROQ_API_KEY
+        sync: false        # set manually in Render dashboard -- used for scanned/image-only PDFs and the AI table-remapping fallback
 
   # ---- Frontend: React (Vite) static build ----
   - type: web
