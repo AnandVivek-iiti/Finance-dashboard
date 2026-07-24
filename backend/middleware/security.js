@@ -2,9 +2,7 @@ const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
 const hpp = require("hpp");
 const compression = require("compression");
-const mongoSanitize = require("express-mongo-sanitize");
 
-const sanitizeBody = mongoSanitize();
 
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -52,4 +50,4 @@ function applySecurity(app) {
   app.use(apiLimiter);
 }
 
-module.exports = { applySecurity, authLimiter, uploadLimiter, requireXhrHeader, sanitizeBody };
+module.exports = { applySecurity, authLimiter, uploadLimiter, requireXhrHeader };

@@ -31,8 +31,8 @@ const DEFAULT_CREDIT_CATEGORY = "Uncategorized Income";
 function normalizeRemarks(remarks) {
   return String(remarks || "")
     .toLowerCase()
-    .replace(/\d{6,}/g, "") // strip long reference numbers / timestamps
-    .replace(/[^a-z\s]/g, " ") // strip punctuation/digits
+    .replace(/\d{6,}/g, "")
+    .replace(/[^a-z\s]/g, " ") 
     .replace(/\s+/g, " ")
     .trim();
 }

@@ -5,7 +5,7 @@ const { signToken } = require("../utils/jwt");
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 const COOKIE_NAME = "token";
-const COOKIE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days, matches JWT expiry
+const COOKIE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 function cookieOptions() {
   return {
@@ -15,6 +15,10 @@ function cookieOptions() {
     maxAge: COOKIE_MAX_AGE_MS,
     domain: process.env.COOKIE_DOMAIN || undefined,
   };
+}
+
+function toPublicUser(user) {
+  return { id: user._id, email: user.email, name: user.name, picture: user.picture };
 }
 
 async function googleLogin(req, res) {
@@ -38,11 +42,9 @@ async function googleLogin(req, res) {
     return res.status(401).json({ error: "Invalid Google token." });
   }
 
-  let user = await User.findOne({ googleId: payload.sub });
+  let user = await User.findByGoogleId(payload.sub);
   if (!user) {
-    // A Google account's email is verified by Google, so it's safe to key
-    // find-or-create on it as a fallback in case googleId ever changes.
-    user = await User.findOne({ email: payload.email });
+    user = await User.findByEmail(payload.email);
   }
 
   if (!user) {
@@ -53,37 +55,24 @@ async function googleLogin(req, res) {
       picture: payload.picture || "",
     });
   } else {
-    user.googleId = payload.sub;
-    user.name = payload.name || user.name;
-    user.picture = payload.picture || user.picture;
-    await user.save();
+    user = await User.updateGoogleProfile(user._id, {
+      googleId: payload.sub,
+      name: payload.name || user.name,
+      picture: payload.picture || user.picture,
+    });
   }
 
   const token = signToken(user._id.toString());
   res.cookie(COOKIE_NAME, token, cookieOptions());
 
-  res.json({
-    user: {
-      id: user._id,
-      email: user.email,
-      name: user.name,
-      picture: user.picture,
-    },
-  });
+  res.json({ user: toPublicUser(user) });
 }
 
 async function getMe(req, res) {
-  const user = await User.findById(req.userId).lean();
+  const user = await User.findById(req.userId);
   if (!user) return res.status(401).json({ error: "Not signed in." });
 
-  res.json({
-    user: {
-      id: user._id,
-      email: user.email,
-      name: user.name,
-      picture: user.picture,
-    },
-  });
+  res.json({ user: toPublicUser(user) });
 }
 
 async function logout(req, res) {

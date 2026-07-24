@@ -1,18 +1,35 @@
-const mongoose = require("mongoose");
+const { pool } = require("../db/pool");
 
-const CategoryOverrideSchema = new mongoose.Schema(
-  {
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, index: true },
-    normalizedRemarks: { type: String, required: true },
-    category: { type: String, required: true },
-    merchantOrSource: { type: String, default: "" },
-    exampleRemarks: { type: String, default: "" },
-  },
-  { timestamps: true }
-);
+const SELECT_FIELDS = `
+  id AS "_id",
+  user_id AS "userId",
+  normalized_remarks AS "normalizedRemarks",
+  category,
+  merchant_or_source AS "merchantOrSource",
+  example_remarks AS "exampleRemarks",
+  created_at AS "createdAt",
+  updated_at AS "updatedAt"
+`;
 
-// Category corrections are scoped per user - a merchant/remark pattern
-// learned from one person's account must never apply to another user's.
-CategoryOverrideSchema.index({ userId: 1, normalizedRemarks: 1 }, { unique: true });
+async function listForUser(userId) {
+  const { rows } = await pool.query(`SELECT ${SELECT_FIELDS} FROM category_overrides WHERE user_id = $1`, [userId]);
+  return rows;
+}
 
-module.exports = mongoose.model("CategoryOverride", CategoryOverrideSchema);
+async function upsert({ userId, normalizedRemarks, category, merchantOrSource, exampleRemarks }) {
+  const { rows } = await pool.query(
+    `INSERT INTO category_overrides (user_id, normalized_remarks, category, merchant_or_source, example_remarks)
+     VALUES ($1,$2,$3,$4,$5)
+     ON CONFLICT (user_id, normalized_remarks)
+     DO UPDATE SET
+       category = EXCLUDED.category,
+       merchant_or_source = EXCLUDED.merchant_or_source,
+       example_remarks = EXCLUDED.example_remarks,
+       updated_at = now()
+     RETURNING ${SELECT_FIELDS}`,
+    [userId, normalizedRemarks, category, merchantOrSource || "", exampleRemarks || ""]
+  );
+  return rows[0];
+}
+
+module.exports = { listForUser, upsert };

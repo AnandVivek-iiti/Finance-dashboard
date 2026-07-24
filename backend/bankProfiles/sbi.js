@@ -1,47 +1,21 @@
-
-
-const { parseAmountToPaise } = require("../utils/money");
+﻿const { parseAmountToPaise } = require("../utils/money");
 const { parseStatementDate } = require("../parsers/dateParser");
+const { stripCrDrSuffix } = require("../utils/signedAmount");
 
-const CANONICAL_FIELDS = ["date", "transactionId", "withdrawal", "deposit", "balance", "remarks"];
+const BANK_NAME_RE = /state bank of india|\bsbi\b/i;
 
 function cell(row, i) {
   return row && row[i] !== undefined && row[i] !== null ? String(row[i]).trim() : "";
 }
 
-const HEADER_MATCHERS = {
-  date: /date/i,
-  remarks: /detail/i,
-  transactionId: (h) => /ref/i.test(h) && /no/i.test(h),
-  withdrawal: /debit/i,
-  deposit: /credit/i,
-  balance: /balance/i,
-};
-
-function matches(field, text) {
-  const matcher = HEADER_MATCHERS[field];
-  return typeof matcher === "function" ? matcher(text) : matcher.test(text);
-}
-
-function findHeaderRow(rows) {
-  for (let r = 0; r < rows.length; r++) {
-    const row = rows[r];
-    if (!row) continue;
-    const mapping = {};
-    for (let c = 0; c < row.length; c++) {
-      const text = cell(row, c);
-      if (!text) continue;
-      for (const field of CANONICAL_FIELDS) {
-        if (mapping[field] === undefined && matches(field, text)) mapping[field] = c;
-      }
-    }
-    if (["date", "withdrawal", "deposit", "balance"].every((f) => mapping[f] !== undefined)) {
-      return { headerRowIndex: r, columnMap: mapping };
+function identify(rows) {
+  for (const row of rows.slice(0, 40)) {
+    for (const raw of row || []) {
+      if (BANK_NAME_RE.test(String(raw ?? ""))) return true;
     }
   }
-  return null;
+  return false;
 }
-
 
 function extractMetadata(rows, headerRowIndex) {
   const meta = {
@@ -53,7 +27,6 @@ function extractMetadata(rows, headerRowIndex) {
     periodEnd: null,
   };
 
-  const BANK_NAME_RE = /state bank of india/i;
   let bankRowIdx = -1;
 
   for (let r = 0; r < headerRowIndex; r++) {
@@ -83,8 +56,6 @@ function extractMetadata(rows, headerRowIndex) {
     }
   }
 
-  // Positional fallback: the row naming the bank has the account holder's
-  // name in the other cell on that same row.
   if (bankRowIdx !== -1 && !meta.accountHolderName) {
     const bankRowCells = (rows[bankRowIdx] || []).map((c) => String(c ?? "").trim()).filter(Boolean);
     const name = bankRowCells.find((c) => !BANK_NAME_RE.test(c));
@@ -94,34 +65,14 @@ function extractMetadata(rows, headerRowIndex) {
   return meta;
 }
 
-/** Rows to skip within the transaction table itself. */
 function isSkippableRow(row, columnMap) {
   const dateCell = cell(row, columnMap.date).toLowerCase();
   const remarksCell = cell(row, columnMap.remarks).toLowerCase();
-  if (!dateCell) return true; // blank trailing rows
+  if (!dateCell) return true;
   if (/^(opening balance|closing balance|b\/f|brought forward)/.test(remarksCell)) return true;
   return false;
 }
 
-function stripCrDrSuffix(raw) {
-  if (raw === null || raw === undefined) return raw;
-  return String(raw).replace(/\s*(cr|dr)\s*$/i, "");
-}
-
-/**
- * SBI-specific balance source, since (unlike Canara) there's no inline
- * Opening/Closing Balance row inside the transaction table to read from.
- * Primary source is the "Statement Summary" block near the end of the
- * sheet; falls back to the "Clear Balance" field near the top if that
- * block is missing or truncated (which has no opening-balance equivalent,
- * so openingBalancePaise stays null in that fallback path).
- *
- * Also reports stopRowIndex so the caller can stop walking rows as
- * transactions once the summary block starts - otherwise its own rows
- * (and the "Statement Summary : ... to ..." label row above it) get
- * treated as unparseable transaction rows and pollute parseErrors with
- * noise that isn't a real parse problem.
- */
 function extractBalances(rows) {
   for (let i = 0; i < rows.length; i++) {
     const row = (rows[i] || []).map((c) => (c === undefined || c === null ? "" : String(c).trim()));
@@ -148,7 +99,6 @@ function extractBalances(rows) {
     break;
   }
 
-  // Fallback: "Clear Balance : 636.78CR" near the top of the sheet.
   for (let i = 0; i < rows.length; i++) {
     for (const cellRaw of rows[i] || []) {
       const text = String(cellRaw ?? "").trim();
@@ -168,8 +118,8 @@ function extractBalances(rows) {
 module.exports = {
   id: "sbi",
   name: "State Bank of India",
-  dateFormat: "DD/MM/YYYY", // e.g. 21/03/2025
-  findHeaderRow,
+  dateFormat: "DD/MM/YYYY",
+  identify,
   extractMetadata,
   isSkippableRow,
   extractBalances,

@@ -5,7 +5,7 @@ const cookieParser = require("cookie-parser");
 const connectDB = require("./config/db");
 const { errorHandler } = require("./middleware/errorHandler");
 const requireAuth = require("./middleware/requireAuth");
-const { applySecurity, authLimiter, uploadLimiter, requireXhrHeader, sanitizeBody } = require("./middleware/security");
+const { applySecurity, authLimiter, uploadLimiter, requireXhrHeader } = require("./middleware/security");
 
 const authRoutes = require("./routes/auth");
 const uploadRoutes = require("./routes/upload");
@@ -34,7 +34,6 @@ applySecurity(app);
 
 app.use(express.json());
 app.use(cookieParser());
-app.use(sanitizeBody);
 app.use(requireXhrHeader);
 
 app.get("/", (req, res) => {

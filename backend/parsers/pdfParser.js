@@ -28,10 +28,10 @@ function readPdfToRowsViaPdfplumber(filePath, password) {
             const e = new Error(parsedErr.error);
             if (parsedErr.passwordRequired) {
               e.code = parsedErr.wrongPassword ? "INVALID_PASSWORD" : "PASSWORD_REQUIRED";
-              e.expose = true; // crafted, user-actionable message -- no raw internals in it
+              e.expose = true;
             }
             if (parsedErr.needsOcr) {
-              e.code = "NEEDS_OCR"; // handled internally by readPdfToRows, never reaches the client
+              e.code = "NEEDS_OCR";
             }
             return reject(e);
           }

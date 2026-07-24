@@ -2,7 +2,7 @@ const { spawnSync } = require("child_process");
 
 const CANDIDATES = [process.env.PYTHON_BIN, "python3", "python", "py"].filter(Boolean);
 
-let resolved = null; // cached after first successful probe
+let resolved = null;
 
 function resolvePythonBin() {
   if (resolved) return resolved;

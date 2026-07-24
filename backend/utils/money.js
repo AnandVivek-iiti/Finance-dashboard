@@ -1,4 +1,3 @@
-
 function parseAmountToPaise(raw) {
   if (raw === null || raw === undefined) return null;
 

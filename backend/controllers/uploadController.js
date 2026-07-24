@@ -1,4 +1,4 @@
-const path = require("path");
+﻿const path = require("path");
 const fs = require("fs");
 
 const Statement = require("../models/Statement");
@@ -14,7 +14,7 @@ const { reinterpretRowsViaAI } = require("../services/aiFallbackParser");
 const PASSWORD_CODES = ["PASSWORD_REQUIRED", "INVALID_PASSWORD"];
 
 async function loadOverridesMap(userId) {
-  const overrides = await CategoryOverride.find({ userId }).lean();
+  const overrides = await CategoryOverride.listForUser(userId);
   const map = new Map();
   for (const o of overrides) {
     map.set(o.normalizedRemarks, { category: o.category, merchantOrSource: o.merchantOrSource });
@@ -22,19 +22,10 @@ async function loadOverridesMap(userId) {
   return map;
 }
 
-
 async function checkContinuity(userId, accountNumber, periodStart, openingBalancePaise, filename) {
   if (!accountNumber || openingBalancePaise === null) return null;
 
-  const previous = await Statement.findOne({
-    userId,
-    accountNumber,
-    status: "ready",
-    periodEnd: { $ne: null, $lt: periodStart || new Date(8640000000000000) },
-  })
-    .sort({ periodEnd: -1 })
-    .lean();
-
+  const previous = await Statement.findLatestBefore(userId, accountNumber, periodStart);
   if (!previous) return null;
   if (previous.closingBalancePaise === null) return null;
 
@@ -79,11 +70,8 @@ async function handleUpload(req, res) {
     const overridesMap = await loadOverridesMap(userId);
     let result = normalizeTable(rows, overridesMap);
     let aiFallback = null;
+    let preAiDiagnostics = result.diagnostics || null;
 
-    // Fall back to AI remapping both when no profile's header matched at all,
-    // AND when a profile matched the header but the row data still yielded
-    // zero usable transactions (e.g. header looked right but columns/format
-    // didn't actually fit the schema).
     const needsAiFallback = result.error || (result.transactions && result.transactions.length === 0);
 
     if (needsAiFallback && process.env.GROQ_API_KEY) {
@@ -104,10 +92,19 @@ async function handleUpload(req, res) {
     if (result.error) {
       const err = new Error(result.error);
       err.expose = true;
+      err.diagnostics = preAiDiagnostics;
       throw err;
     }
 
-    const { metadata, transactions, parseErrors, openingBalancePaise, closingBalancePaise, bankProfileId } = result;
+    const {
+      metadata,
+      transactions,
+      parseErrors,
+      openingBalancePaise,
+      closingBalancePaise,
+      bankProfileId,
+      headerConfidence,
+    } = result;
 
     if (transactions.length === 0) {
       const errorCounts = {};
@@ -118,6 +115,7 @@ async function handleUpload(req, res) {
       );
       const err = new Error("No valid transactions could be parsed from this file. See parse errors for details.");
       err.expose = true;
+      err.diagnostics = preAiDiagnostics;
       throw err;
     }
 
@@ -147,9 +145,7 @@ async function handleUpload(req, res) {
       continuityWarning: continuityWarning || null,
     });
 
-    await Transaction.insertMany(
-      transactions.map((t) => ({ ...t, userId, statementId: statement._id }))
-    );
+    await Transaction.insertMany(transactions.map((t) => ({ ...t, userId, statementId: statement._id })));
 
     if (parseErrors.length > 0) {
       await ParseError.insertMany(parseErrors.map((e) => ({ ...e, userId, statementId: statement._id })));
@@ -167,16 +163,17 @@ async function handleUpload(req, res) {
       aiFallbackUsed: aiFallback ? aiFallback.used : false,
       aiFallbackConfidence: aiFallback ? aiFallback.confidence : null,
       aiFallbackTruncated: aiFallback ? aiFallback.truncated : false,
+
+      headerConfidence: headerConfidence != null ? headerConfidence : null,
     });
   } catch (err) {
-
     console.error(`[upload] failed for user ${userId}:`, err.stack || err.message);
 
     if (PASSWORD_CODES.includes(err.code)) {
       return res.status(401).json({ error: err.message, code: err.code });
     }
     if (err.expose) {
-      return res.status(422).json({ error: err.message, code: err.code || null });
+      return res.status(422).json({ error: err.message, code: err.code || null, diagnostics: err.diagnostics || null });
     }
     res.status(500).json({
       error: "We couldn't process this file. Please check that it's a valid bank statement and try again.",

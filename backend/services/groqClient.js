@@ -20,22 +20,20 @@ const MAX_ATTEMPTS_PER_KEY = 2;
 const BASE_BACKOFF_MS = 1000;
 const MAX_429_RETRIES = 6;
 const DEFAULT_429_WAIT_MS = 2000;
-const MAX_TOTAL_429_WAIT_MS = 30000; // give up rather than hang indefinitely on one call
+const MAX_TOTAL_429_WAIT_MS = 30000;
 
 function parseRetryAfterMs(message) {
   const match = /try again in ([\d.]+)\s*s/i.exec(message || "");
   if (!match) return null;
   const seconds = parseFloat(match[1]);
   if (Number.isNaN(seconds)) return null;
-  return Math.ceil(seconds * 1000) + 250; // small buffer so we land just after the window resets
+  return Math.ceil(seconds * 1000) + 250;
 }
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// Single HTTP call. Returns a plain result descriptor rather than throwing,
-// so callers can decide what to do with each status code.
 async function doFetch(key, body) {
   const response = await fetch(GROQ_ENDPOINT, {
     method: "POST",
@@ -66,8 +64,6 @@ async function attemptWithKey(key, keyIndex, keyCount, body) {
       continue;
     }
 
-    // Absorb 429s here, outside the outer attempt budget, since they're
-    // expected and short-lived rather than a failure of this key/request.
     let total429WaitMs = 0;
     let retries429 = 0;
     let networkErrorDuring429Wait = false;
@@ -104,9 +100,7 @@ async function attemptWithKey(key, keyIndex, keyCount, body) {
     if (result.ok) {
       return { ok: true, data: result.data };
     }
-
-    // result.status is a non-429, non-ok status at this point.
-    if (RETRYABLE_STATUS.has(result.status) && attempt < MAX_ATTEMPTS_PER_KEY) {
+ if (RETRYABLE_STATUS.has(result.status) && attempt < MAX_ATTEMPTS_PER_KEY) {
       lastError = new Error(`Groq request failed (${result.status}): ${result.text.slice(0, 300)}`);
       lastError.code = "GROQ_API_ERROR";
       await sleep(BASE_BACKOFF_MS * attempt);

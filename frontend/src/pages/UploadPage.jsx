@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Loader2, CheckCircle2, AlertTriangle } from "lucide-react";
+import { Loader2, CheckCircle2, AlertTriangle, Download } from "lucide-react";
 import FileDropzone from "../components/FileDropzone.jsx";
 import UserMenu from "../components/UserMenu.jsx";
 import { uploadStatement } from "../utils/api.js";
@@ -89,6 +89,17 @@ export default function UploadPage({
               spreadsheets, no manual work. Every figure traces back to an actual row in your statement.
             </p>
           </div>
+
+          {phase === "idle" && (
+            <a
+              href="/sample-statement.xlsx"
+              download
+              className="mb-5 flex items-center justify-center gap-2 rounded-lg border border-dashed border-accent/40 bg-accent-soft px-4 py-3 text-sm font-medium text-accent hover:bg-accent-soft/70"
+            >
+              <Download size={15} />
+              See what's inside — download a sample statement (500 test transactions)
+            </a>
+          )}
 
           {phase === "idle" && <FileDropzone onFileSelected={handleFileSelected} />}
 

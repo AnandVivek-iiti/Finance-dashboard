@@ -27,15 +27,20 @@ finance-dashboard/
 │   ├── services/
 │   │   ├── metricsEngine.js     # computes every dashboard metric from transactions
 │   │   └── groqOcrService.js  # OCR fallback for scanned/image-only PDFs (poppler + Groq API)
-│   ├── models/                # Statement, Transaction, ParseError, CategoryOverride, User
+│   ├── db/
+│   │   ├── schema.sql        # Postgres schema - users, statements, transactions, parse_errors, category_overrides
+│   │   ├── pool.js           # pg Pool + connection check
+│   │   └── migrate.js        # applies schema.sql - run via `npm run migrate`
+│   ├── models/                # Plain SQL data-access functions - Statement, Transaction, ParseError, CategoryOverride, User
 │   ├── middleware/
 │   │   ├── requireAuth.js         # session cookie -> req.userId, else 401
 │   │   ├── errorHandler.js        # sanitizes all errors before they reach the client (see below)
 │   │   ├── validateFileSignature.js  # checks uploaded file's magic bytes match its extension
-│   │   └── security.js            # helmet, rate limiting, HPP, mongo-sanitize, XHR-header CSRF guard
+│   │   └── security.js            # helmet, rate limiting, HPP, XHR-header CSRF guard
 │   ├── controllers/, routes/
 │   └── server.js
 ├── frontend/
+│   ├── public/sample-statement.xlsx  # 500-transaction test file, served from the "download a sample" button
 │   ├── src/pages/LandingPage.jsx  # public, signed-out entry point (Google button)
 │   ├── src/pages/UploadPage.jsx, DashboardPage.jsx
 │   ├── src/components/        # KpiCards, charts, FilterBar, StatementSwitcher, etc.
@@ -45,14 +50,23 @@ finance-dashboard/
 
 ## Why this stack
 
-- **MongoDB** stores three collections: `statements` (metadata per upload),
-  `transactions` (normalized, strictly-typed, one document per transaction),
-  `parseerrors` (rows that couldn't be verified - shown to you, not hidden).
+- **Postgres** (developed against [Neon](https://neon.tech), works with any
+  Postgres instance) stores everything in four tables: `statements`
+  (metadata per upload), `transactions` (normalized, strictly-typed, one row
+  per transaction), `parse_errors` (rows that couldn't be verified - shown to
+  you, not hidden), and `category_overrides`. There's no ORM - every query is
+  plain, parameterized SQL (`backend/models/`, `backend/utils/sqlFilters.js`)
+  against a single `pg` `Pool` (`backend/db/pool.js`), so what the database
+  does is never hidden behind query-builder magic. Foreign keys use
+  `ON DELETE CASCADE`, so deleting a statement removes its transactions and
+  parse errors in the same operation.
 - **Express** does all parsing, validation, categorization, and metrics
   computation. The frontend never computes a statistic itself - it only
   renders what the API returns.
 - **React + Recharts**, light theme, KPI cards + charts + a searchable
-  transaction table.
+  transaction table. The upload page also offers a **sample statement
+  download** (500 test transactions, `public/sample-statement.xlsx`) so
+  anyone can try the full dashboard without needing a real bank statement.
 - **Python + pdfplumber** for PDF table extraction specifically - pdfplumber's
   table detection is meaningfully better than any pure-Node library at the
   time of writing, so `pdfParser.js` shells out to a small Python script
@@ -68,11 +82,13 @@ finance-dashboard/
   message instead of silently failing).
 - **Security middleware** (`middleware/security.js`): Helmet for standard
   HTTP security headers, `express-rate-limit` (separate, tighter limits on
-  auth and upload endpoints than general API traffic), `express-mongo-sanitize`
-  against NoSQL injection, `hpp` against HTTP parameter pollution, and a
-  custom `X-Requested-With` header check as a lightweight CSRF guard on the
-  cookie-based session (see the comment in `security.js` for why a full CSRF
-  token library isn't needed here).
+  auth and upload endpoints than general API traffic), `hpp` against HTTP
+  parameter pollution, and a custom `X-Requested-With` header check as a
+  lightweight CSRF guard on the cookie-based session (see the comment in
+  `security.js` for why a full CSRF token library isn't needed here). There's
+  no NoSQL-sanitization middleware - every query is parameterized SQL, so
+  there's no `$`-operator injection surface to guard against in the first
+  place.
 - **Centralized error sanitization** (`middleware/errorHandler.js`): every
   route is wrapped in `asyncHandler`, so any thrown/rejected error - a bad
   `:id` param, a DB hiccup, an unexpected bug - ends up here. Only errors
@@ -98,11 +114,11 @@ hashing, reset-flow, or leak surface to build or secure.
   Google token is never used as the session itself.
 - Every protected route (`/api/upload`, `/api/statements`, `/api/metrics`,
   `/api/transactions`) requires that cookie via `requireAuth` middleware.
-- **All data is strictly scoped per Google account.** `Statement`,
-  `Transaction`, `ParseError`, and `CategoryOverride` documents all carry a
-  `userId`, and every query filters on it - one signed-in user can never
-  read, list, or delete another user's statements or transactions, even by
-  guessing an ID.
+- **All data is strictly scoped per Google account.** The `statements`,
+  `transactions`, `parse_errors`, and `category_overrides` tables all carry a
+  `user_id` foreign key, and every query filters on it - one signed-in user
+  can never read, list, or delete another user's statements or transactions,
+  even by guessing an ID.
 - `GET /api/auth/me` reports the current session (or `401`); `POST
   /api/auth/logout` clears the cookie.
 
@@ -145,8 +161,9 @@ it behaves.
   sudo apt-get install poppler-utils   # Debian/Ubuntu
   brew install poppler                 # macOS
   ```
-- A MongoDB instance - local (`mongod` on `localhost:27017`) or a free
-  [MongoDB Atlas](https://www.mongodb.com/atlas) cluster.
+- A Postgres instance - local, or a free [Neon](https://neon.tech) project
+  (serverless Postgres; this is what the app is developed against). Any
+  standard Postgres connection string works.
 - A Google OAuth Client ID (see Google Cloud setup above).
 - (Optional) A **Groq API key** if you want OCR support for scanned PDF
   statements - get one from [Groq Console](https://console.groq.com/keys).
@@ -163,7 +180,8 @@ it behaves.
 
 | Variable            | Required | Notes                                                                 |
 |---------------------|----------|------------------------------------------------------------------------|
-| `MONGO_URI`         | yes      | Local Mongo or Atlas connection string.                               |
+| `DATABASE_URL`      | yes      | Postgres connection string, e.g. `postgresql://user:pass@ep-xxxx.aws.neon.tech/dbname?sslmode=require`. |
+| `PGSSL`             | no       | Set to `disable` only for a local Postgres with no SSL configured. SSL is on by default (required by Neon and most hosted Postgres). |
 | `PORT`              | no       | Defaults to `5000`.                                                    |
 | `PYTHON_BIN`        | no       | Only needed if `python` isn't on your `PATH`, e.g. `python3`.          |
 | `NODE_ENV`          | no       | `development` or `production`.                                        |
@@ -191,7 +209,8 @@ it behaves.
 ```bash
 cd backend
 npm install
-cp .env.example .env      # fill in GOOGLE_CLIENT_ID, JWT_SECRET, and MONGO_URI/PYTHON_BIN if needed
+cp .env.example .env      # fill in GOOGLE_CLIENT_ID, JWT_SECRET, and DATABASE_URL/PYTHON_BIN if needed
+npm run migrate            # creates the Postgres tables (safe to re-run)
 npm run dev                # http://localhost:5000
 ```
 
@@ -205,7 +224,11 @@ npm run dev                 # http://localhost:5173, proxies /api -> :5000
 ```
 
 Open the printed URL. You'll land on the public landing page - sign in with
-Google, and the upload flow appears automatically.
+Google, and the upload flow appears automatically. Don't have a bank
+statement handy to test with? The upload page has a **"download a sample
+statement"** button - it fetches `public/sample-statement.xlsx`, a 500-row
+test file that parses cleanly (0 errors) and exercises most categories, so
+you can see the full dashboard immediately.
 
 ## 4. How a file becomes a dashboard (the accuracy pipeline)
 
@@ -244,7 +267,7 @@ Google, and the upload flow appears automatically.
    A blank withdrawal/deposit cell is `null` ("no value"), never `0`.
 4. **Reconcile every row.** Each row's stated balance is checked against
    `previousBalance ± thisTransactionAmount`. If it doesn't match, the row
-   is flagged `reconciled: false` and logged to `parseErrors` - and is then
+   is flagged `reconciled: false` and logged to `parse_errors` - and is then
    **excluded from every metric** (see step 6), because an unverified amount
    shouldn't silently count toward your totals. On your actual statement,
    this caught one real row where the bank recorded a negative value in the
@@ -254,9 +277,9 @@ Google, and the upload flow appears automatically.
    against each row's remarks (ATM, UPI, NEFT, salary, rent, etc.), and
    extracts a best-effort merchant/payee name. If you manually correct a
    category in the transaction table, that correction is saved as a
-   `CategoryOverride` keyed by a normalized version of the remarks - so the
-   same remark (in this statement or a future one) is auto-categorized
-   correctly from then on.
+   `category_overrides` row keyed by a normalized version of the remarks -
+   so the same remark (in this statement or a future one) is
+   auto-categorized correctly from then on.
 6. **Compute metrics** (`services/metricsEngine.js`), live, per request,
    filtered by whatever's active in the UI:
    1. Total spent · 2. Total received · 3. Net savings + savings rate ·
@@ -283,8 +306,9 @@ automatically.
 ## 6. Deleting your data
 
 Every statement in the switcher dropdown has a delete icon - it removes the
-statement, all its transactions, and its parse errors from MongoDB
-permanently. This matters because these files contain a real account number,
+statement, all its transactions, and its parse errors from Postgres
+permanently (the `ON DELETE CASCADE` foreign keys handle this in one
+operation). This matters because these files contain a real account number,
 IFSC code, and your name.
 
 ## 7. Adding support for another bank
@@ -361,12 +385,17 @@ a static site for the frontend:
      covers both `pdfplumber` and `msoffcrypto-tool`).
    - Start command: `npm start`
    - Health check path: `/`
-   - Environment variables: `MONGO_URI`, `PORT` (Render sets this
-     automatically), `PYTHON_BIN=python`, `NODE_ENV=production`,
-     `FRONTEND_URL` (your deployed static site URL, e.g.
-     `https://finance-dashboard-frontend.onrender.com`), `GOOGLE_CLIENT_ID`,
-     `GROQ_API_KEY` (optional - for scanned-PDF OCR and the unrecognized-format AI fallback), `JWT_SECRET`,
-     and `COOKIE_DOMAIN` if you're using one.
+   - Environment variables: `DATABASE_URL` (your Neon/Postgres connection
+     string), `PORT` (Render sets this automatically), `PYTHON_BIN=python`,
+     `NODE_ENV=production`, `FRONTEND_URL` (your deployed static site URL,
+     e.g. `https://finance-dashboard-frontend.onrender.com`),
+     `GOOGLE_CLIENT_ID`, `GROQ_API_KEY` (optional - for scanned-PDF OCR and
+     the unrecognized-format AI fallback), `JWT_SECRET`, and
+     `COOKIE_DOMAIN` if you're using one.
+   - Before the first deploy (or after any `db/schema.sql` change), run
+     `npm run migrate` once against the same `DATABASE_URL` - either from
+     your local machine (pointed at the production database) or via
+     Render's shell for the service.
 
 2. **Frontend (Static Site)**
    - Root directory: `frontend`

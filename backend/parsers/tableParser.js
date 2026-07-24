@@ -1,23 +1,35 @@
-const { parseAmountToPaise } = require("../utils/money");
+﻿const { parseAmountToPaise } = require("../utils/money");
 const { parseStatementDate } = require("./dateParser");
 const { categorize } = require("./categorizer");
-const { detectProfile } = require("../bankProfiles");
+const { detectProfile, detectProfileDiagnostics } = require("../bankProfiles");
+const { resolveSignedAmount } = require("../utils/signedAmount");
 
 function cell(row, i) {
   if (i === undefined || i === null) return "";
   return row && row[i] !== undefined && row[i] !== null ? String(row[i]).trim() : "";
 }
 
+function resolveWithdrawalDeposit(row, columnMap) {
+  if (columnMap.amount !== undefined) {
+    const indicatorRaw = columnMap.drCrIndicator !== undefined ? cell(row, columnMap.drCrIndicator) : undefined;
+    return resolveSignedAmount(cell(row, columnMap.amount), indicatorRaw);
+  }
+  return {
+    withdrawalPaise: parseAmountToPaise(cell(row, columnMap.withdrawal)),
+    depositPaise: parseAmountToPaise(cell(row, columnMap.deposit)),
+  };
+}
 
 function normalizeTable(rows, overridesMap) {
   const detected = detectProfile(rows);
   if (!detected) {
     return {
       error: "Could not locate a recognizable transaction table header (Date/Withdrawal/Deposit/Balance columns). This bank's export format isn't supported yet.",
+      diagnostics: detectProfileDiagnostics(rows),
     };
   }
 
-  const { profile, headerRowIndex, columnMap } = detected;
+  const { profile, headerRowIndex, columnMap, confidence, diagnostics } = detected;
   const metadata = profile.extractMetadata(rows, headerRowIndex);
 
   const externalBalances = profile.extractBalances ? profile.extractBalances(rows) : null;
@@ -51,8 +63,7 @@ function normalizeTable(rows, overridesMap) {
       continue;
     }
 
-    const withdrawalPaise = parseAmountToPaise(cell(row, columnMap.withdrawal));
-    const depositPaise = parseAmountToPaise(cell(row, columnMap.deposit));
+    const { withdrawalPaise, depositPaise } = resolveWithdrawalDeposit(row, columnMap);
     const balancePaise = parseAmountToPaise(cell(row, columnMap.balance));
 
     if (balancePaise === null) {
@@ -86,7 +97,7 @@ function normalizeTable(rows, overridesMap) {
         });
       }
     }
-    runningBalancePaise = balancePaise; // always trust the statement's own column going forward
+    runningBalancePaise = balancePaise;
 
     const { category, merchantOrSource } = categorize(remarks, type, overridesMap);
 
@@ -117,6 +128,8 @@ function normalizeTable(rows, overridesMap) {
       ? externalBalances.closingBalancePaise
       : null,
     bankProfileId: profile.id,
+    headerConfidence: confidence,
+    diagnostics,
   };
 }
 

@@ -1,18 +1,35 @@
-const canara = require("./canara");
+﻿const canara = require("./canara");
 const sbi = require("./sbi");
 const generic = require("./generic");
+const { detectHeader } = require("./headerEngine");
 
-// Order matters: more specific profiles first, generic fallback last.
-const PROFILES = [canara, sbi, generic];
- 
-function detectProfile(rows) {
-  for (const profile of PROFILES) {
-    const found = profile.findHeaderRow(rows);
-    if (found) {
-      return { profile, headerRowIndex: found.headerRowIndex, columnMap: found.columnMap };
-    }
+// Header detection is fully shared (headerEngine). This list is only used
+// to pick which profile supplies metadata/skip-rules/balance-extraction.
+const BANK_PROFILES = [canara, sbi];
+
+function identifyBankProfile(rows) {
+  for (const profile of BANK_PROFILES) {
+    if (profile.identify && profile.identify(rows)) return profile;
   }
-  return null;
+  return generic;
 }
 
-module.exports = { detectProfile, PROFILES };
+function detectProfile(rows) {
+  const { best, diagnostics } = detectHeader(rows);
+  if (!best) return null;
+
+  const profile = identifyBankProfile(rows);
+  return {
+    profile,
+    headerRowIndex: best.headerRowIndex,
+    columnMap: best.columnMap,
+    confidence: best.confidence,
+    diagnostics,
+  };
+}
+
+function detectProfileDiagnostics(rows) {
+  return detectHeader(rows).diagnostics;
+}
+
+module.exports = { detectProfile, detectProfileDiagnostics, PROFILES: [...BANK_PROFILES, generic] };

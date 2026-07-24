@@ -35,7 +35,7 @@ function assertGroqConfigured() {
         "Add GROQ_API_KEY to backend/.env to enable OCR for scanned statements."
     );
     err.code = "OCR_NOT_CONFIGURED";
-    err.expose = true; // crafted, user-actionable message -- no raw internals in it
+    err.expose = true;
     throw err;
   }
 }
@@ -56,14 +56,12 @@ function renderPdfPagesToPng(filePath, password) {
         "Install it with `apt-get install poppler-utils` (see README Deployment section)."
     );
     err.code = "OCR_RENDER_FAILED";
-    err.expose = true; // crafted, user-actionable message -- no raw internals in it
+    err.expose = true;
     throw err;
   }
   if (result.status !== 0) {
     fs.rmSync(tmpDir, { recursive: true, force: true });
     const stderr = (result.stderr || "").toString();
-    // Intentionally NOT exposed -- stderr here is raw poppler/system output
-    // (may include file paths), not something an end user can act on.
     const err = new Error(`Could not rasterize PDF for OCR: ${stderr.trim() || "pdftoppm failed"}`);
     err.code = "OCR_RENDER_FAILED";
     throw err;
@@ -109,9 +107,7 @@ async function ocrOnePage(pngPath) {
   try {
     data = await callGroqChatCompletion(body);
   } catch (e) {
-    // Intentionally NOT exposed -- e.message may embed a raw API response
-    // body/status from groqClient, which shouldn't reach the browser.
-    const err = new Error(`Groq OCR request failed: ${e.message}`);
+   const err = new Error(`Groq OCR request failed: ${e.message}`);
     err.code = "OCR_API_ERROR";
     throw err;
   }

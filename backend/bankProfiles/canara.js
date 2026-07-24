@@ -1,33 +1,16 @@
-const { parseStatementDate } = require("../parsers/dateParser");
-
-const COLUMN_MATCHERS = {
-  date: (h) => /date/i.test(h),
-  transactionId: (h) => (/actio/i.test(h) && /id/i.test(h)) || /txn.{0,3}id/i.test(h) || /chq|cheque|ref.{0,3}no/i.test(h),
-  withdrawal: (h) => /withdrawal/i.test(h),
-  deposit: (h) => /deposit/i.test(h),
-  balance: (h) => /balance/i.test(h),
-  remarks: (h) => /remark/i.test(h),
-};
-const REQUIRED_HEADER_FIELDS = ["date", "withdrawal", "deposit", "balance"];
+﻿const { parseStatementDate } = require("../parsers/dateParser");
 
 function cell(row, i) {
   return row && row[i] !== undefined && row[i] !== null ? String(row[i]).trim() : "";
 }
 
-function findHeaderRow(rows) {
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i].map((c) => (c === undefined || c === null ? "" : String(c).trim()));
-    const matched = {};
-    for (const [field, matcher] of Object.entries(COLUMN_MATCHERS)) {
-      const colIdx = row.findIndex((c) => c.length > 0 && matcher(c));
-      if (colIdx !== -1) matched[field] = colIdx;
-    }
-    const allFound = REQUIRED_HEADER_FIELDS.every((f) => f in matched);
-    if (allFound) {
-      return { headerRowIndex: i, columnMap: matched };
+function identify(rows) {
+  for (const row of rows.slice(0, 40)) {
+    for (const raw of row || []) {
+      if (/canara/i.test(String(raw ?? ""))) return true;
     }
   }
-  return null;
+  return false;
 }
 
 function extractMetadata(rows, headerRowIndex) {
@@ -83,7 +66,7 @@ module.exports = {
   id: "canara",
   name: "Canara Bank",
   dateFormat: "DD-MMM-YYYY",
-  findHeaderRow,
+  identify,
   extractMetadata,
   isSkippableRow,
 };

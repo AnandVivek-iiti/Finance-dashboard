@@ -1,4 +1,4 @@
-const XLSX = require("xlsx");
+const XLSX = require('@keep-lts/xlsx');
 const fs = require("fs");
 const path = require("path");
 const { execFile } = require("child_process");
