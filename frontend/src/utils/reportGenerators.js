@@ -6,6 +6,9 @@ import { formatRupees, formatDate } from "./format.js";
 const money = (paise) => (paise == null ? "unavailable" : formatRupees(paise, { decimals: 2 }));
 const date = (d) => (d == null ? "" : formatDate(d));
 
+const pdfSafe = (str) => String(str).replace(/₹/g, "Rs. ").replace(/Rs\. -/g, "-Rs. ");
+const moneyPdf = (paise) => pdfSafe(money(paise));
+
 function getSummaryRows(metrics) {
   const rows = [
     ["Transactions counted", metrics.transactionCount?.toLocaleString("en-IN") ?? "0"],
@@ -221,23 +224,139 @@ function metaSubtitle(meta) {
   } - generated ${meta.generated}`;
 }
 
-// Fits an image inside a box, preserving aspect ratio and centering it —
-// used to lay multiple charts out on a single page instead of giving every
-// chart its own full page.
-function drawImageInBox(doc, image, { x, y, width, height }) {
-  if (!image) return;
-  const aspect = image.width / image.height;
-  let w = width;
-  let h = w / aspect;
-  if (h > height) {
-    h = height;
-    w = h * aspect;
+function drawChartImage(doc, image, { marginX, usableWidth, pageHeight, y, label, subtitle }) {
+  let displayWidth = usableWidth;
+  let displayHeight = (image.height / image.width) * displayWidth;
+
+  // A chart taller than a full fresh page would otherwise get silently
+  // clipped at the page boundary instead of ever showing in full - cap it
+  // to the tallest it could possibly be on its own page and scale the
+  // width down to match, preserving aspect ratio.
+  const maxHeightOnFreshPage = pageHeight - 46; // leaves room for title + subtitle + margins
+  if (displayHeight > maxHeightOnFreshPage) {
+    const ratio = maxHeightOnFreshPage / displayHeight;
+    displayHeight = maxHeightOnFreshPage;
+    displayWidth = displayWidth * ratio;
   }
-  doc.addImage(image.dataUrl, "PNG", x + (width - w) / 2, y + (height - h) / 2, w, h);
+
+  const headerHeight = (label ? 5 : 0) + (subtitle ? 4.5 : 0);
+  if (y + headerHeight + displayHeight > pageHeight - 20) {
+    doc.addPage();
+    y = 18;
+  }
+
+  if (label) {
+    doc.setFontSize(12);
+    doc.setTextColor(20);
+    doc.text(label, marginX, y);
+    y += 5;
+  }
+  if (subtitle) {
+    doc.setFontSize(8.5);
+    doc.setTextColor(130);
+    doc.text(subtitle, marginX, y);
+    doc.setTextColor(0);
+    y += 4.5;
+  }
+
+  doc.addImage(image.dataUrl, "PNG", marginX, y, displayWidth, displayHeight);
+  return y + displayHeight + 9;
 }
 
-function sectionColumns(key) {
-  return SECTIONS.find(([k]) => k === key)?.[2];
+// Titles/subtitles mirroring exactly what's shown above each chart on the
+// dashboard itself, so the PDF reads the same way the live page does.
+const CHART_TITLES = {
+  monthlySpendTrend: ["Monthly Spend vs Income", "Year-over-year / month-over-month trend"],
+  balanceOverTime: ["Balance Over Time", "Running balance across every transaction"],
+  spendByCategory: ["Spending by Category", "Top 10 categories by total amount"],
+  dayOfWeekPattern: ["Spending by Day of Week", "Weekday vs weekend patterns"],
+  cashVsDigitalSplit: ["Cash vs Digital Spending", "How money leaves the account"],
+};
+
+// Only these three row-level sections are shown on the dashboard's summary
+// tab (as lists, not raw dumps) - the PDF summary export mirrors that,
+// rather than including every transaction-level table.
+const PDF_SUMMARY_LIST_KEYS = ["topMerchants", "recurringPayments", "largestExpenseCategoryPerMonth"];
+const LIST_SECTION_META = {
+  topMerchants: ["Top Merchants / Counterparties", "By total amount sent"],
+  recurringPayments: ["Recurring Payments Detected", "Same payee, similar amount, ~monthly"],
+  largestExpenseCategoryPerMonth: ["Biggest Expense Category, Per Month", "Where most of each month's spend went"],
+};
+
+function getKpiCards(metrics) {
+  return [
+    { label: "Total spent", value: moneyPdf(metrics.totalSpentPaise) },
+    { label: "Total received", value: moneyPdf(metrics.totalReceivedPaise) },
+    {
+      label: "Net savings",
+      value: moneyPdf(metrics.netSavingsPaise),
+      sub: metrics.savingsRatePercent != null ? `${metrics.savingsRatePercent.toFixed(2)}% savings rate` : null,
+    },
+    { label: "Avg. monthly spend", value: moneyPdf(metrics.avgMonthlySpendPaise) },
+    { label: "Avg. monthly income", value: moneyPdf(metrics.avgMonthlyIncomePaise) },
+    {
+      label: "Avg. yearly spend",
+      value: metrics.avgYearlySpendPaise != null ? moneyPdf(metrics.avgYearlySpendPaise) : "N/A (under 1 year)",
+    },
+    {
+      label: "Highest withdrawal",
+      value: metrics.highestWithdrawal ? moneyPdf(metrics.highestWithdrawal.amountPaise) : "unavailable",
+      sub: metrics.highestWithdrawal ? date(metrics.highestWithdrawal.date) : null,
+    },
+    {
+      label: "Highest deposit",
+      value: metrics.highestDeposit ? moneyPdf(metrics.highestDeposit.amountPaise) : "unavailable",
+      sub: metrics.highestDeposit ? date(metrics.highestDeposit.date) : null,
+    },
+    {
+      label: "Lowest balance point",
+      value: metrics.lowestBalancePoint ? moneyPdf(metrics.lowestBalancePoint.balancePaise) : "unavailable",
+      sub: metrics.lowestBalancePoint ? `${date(metrics.lowestBalancePoint.date)} - risk period` : null,
+    },
+    { label: "Avg. transaction size", value: moneyPdf(metrics.avgTransactionSizePaise) },
+    { label: "Transactions counted", value: metrics.transactionCount?.toLocaleString("en-IN") ?? "0" },
+  ];
+}
+
+function drawKpiCards(doc, cards, { marginX, usableWidth, pageHeight, y }) {
+  const cols = 3;
+  const gap = 4;
+  const cardWidth = (usableWidth - gap * (cols - 1)) / cols;
+  const cardHeight = 21;
+  const rowGap = 4;
+
+  for (let i = 0; i < cards.length; i += cols) {
+    const row = cards.slice(i, i + cols);
+    if (y + cardHeight > pageHeight - 16) {
+      doc.addPage();
+      y = 18;
+    }
+    row.forEach((card, col) => {
+      const x = marginX + col * (cardWidth + gap);
+      doc.setDrawColor(224, 226, 230);
+      doc.setFillColor(248, 249, 251);
+      doc.roundedRect(x, y, cardWidth, cardHeight, 1.5, 1.5, "FD");
+
+      doc.setFontSize(8);
+      doc.setTextColor(110);
+      doc.text(card.label, x + 3.5, y + 6.5, { maxWidth: cardWidth - 7 });
+
+      doc.setFontSize(11.5);
+      doc.setTextColor(20);
+      doc.setFont(undefined, "bold");
+      doc.text(String(card.value), x + 3.5, y + 13.5, { maxWidth: cardWidth - 7 });
+      doc.setFont(undefined, "normal");
+
+      if (card.sub) {
+        doc.setFontSize(7);
+        doc.setTextColor(140);
+        doc.text(String(card.sub), x + 3.5, y + 18, { maxWidth: cardWidth - 7 });
+      }
+      doc.setTextColor(0);
+    });
+    y += cardHeight + rowGap;
+  }
+  return y;
 }
 
 export function downloadPdfReport({ metrics, title, bankLabel, statementCount, chartImages = {} }) {
@@ -265,96 +384,78 @@ export function downloadPdfReport({ metrics, title, bankLabel, statementCount, c
     return;
   }
 
-  // ---- Page 1: the same KPI numbers shown on the dashboard's summary cards ----
-  const summary = [...getSummaryRows(metrics), ...getFallbackSummaryRows(metrics)];
-  autoTable(doc, {
-    startY: y,
-    head: [["Metric", "Value"]],
-    body: summary,
-    margin: { left: marginX, right: marginX },
-    styles: { fontSize: 9 },
-    headStyles: { fillColor: [30, 41, 59] },
-  });
+  // Informational line only - date range + how many rows were excluded as
+  // unreconciled. Everything else lives in the KPI cards below, matching
+  // what's actually shown on the dashboard's summary tab.
+  const metaBits = [];
+  if (metrics.rangeStart && metrics.rangeEnd) {
+    metaBits.push(`${date(metrics.rangeStart)} to ${date(metrics.rangeEnd)}`);
+  }
+  metaBits.push(`${metrics.unreconciledCount ?? 0} unreconciled row(s) excluded from totals`);
+  doc.setFontSize(8.5);
+  doc.setTextColor(130);
+  doc.text(metaBits.join("   ·   "), marginX, y);
+  doc.setTextColor(0);
+  y += 7;
 
-  // ---- Page 2: Monthly Spend vs Income + Balance Over Time ----
-  doc.addPage();
-  let py = 20;
-  const chartGap = 14;
-  const halfHeight = (pageHeight - py - 16 - chartGap) / 2 - 8;
-
-  doc.setFontSize(13);
-  doc.text("Monthly Spend vs Income", marginX, py);
-  drawImageInBox(doc, chartImages.monthlySpendTrend, { x: marginX, y: py + 5, width: usableWidth, height: halfHeight });
-  py += halfHeight + chartGap;
-
-  doc.setFontSize(13);
-  doc.text("Balance Over Time", marginX, py);
-  drawImageInBox(doc, chartImages.balanceOverTime, { x: marginX, y: py + 5, width: usableWidth, height: halfHeight });
-
-  // ---- Page 3: Category / Day-of-Week / Cash vs Digital + Top Merchants, 2x2 ----
-  doc.addPage();
-  const gap = 10;
-  const colWidth = (usableWidth - gap) / 2;
-  const gridTop = 20;
-  const rowHeight = (pageHeight - gridTop - 16 - gap) / 2 - 10;
-  const col2X = marginX + colWidth + gap;
-  const row2Y = gridTop + rowHeight + gap + 10;
-
-  doc.setFontSize(12);
-  doc.text("Spending by Category", marginX, gridTop);
-  drawImageInBox(doc, chartImages.spendByCategory, { x: marginX, y: gridTop + 5, width: colWidth, height: rowHeight });
-
-  doc.text("Spending by Day of Week", col2X, gridTop);
-  drawImageInBox(doc, chartImages.dayOfWeekPattern, { x: col2X, y: gridTop + 5, width: colWidth, height: rowHeight });
-
-  doc.text("Cash vs Digital Spending", marginX, row2Y);
-  drawImageInBox(doc, chartImages.cashVsDigitalSplit, { x: marginX, y: row2Y + 5, width: colWidth, height: rowHeight });
-
-  doc.text("Top Merchants", col2X, row2Y);
-  const merchantsTable = sectionToTable(metrics?.topMerchants, sectionColumns("topMerchants"));
-  if (merchantsTable) {
-    autoTable(doc, {
-      startY: row2Y + 5,
-      head: [merchantsTable.headers],
-      body: merchantsTable.rows,
-      margin: { left: col2X, right: pageWidth - (col2X + colWidth) },
-      tableWidth: colWidth,
-      styles: { fontSize: 7, cellPadding: 1.5 },
-      headStyles: { fillColor: [30, 41, 59] },
-    });
+  if (Object.keys(chartImages).length === 0) {
+    doc.setFontSize(9);
+    doc.setTextColor(150, 100, 0);
+    doc.text("Charts couldn't be captured for this export - some sections below may be missing.", marginX, y);
+    doc.setTextColor(0);
+    y += 8;
   }
 
-  // ---- Page 4: Recurring Payments + Largest Expense per Month ----
-  doc.addPage();
-  const p4Top = 20;
+  // KPI cards - same numbers shown in the dashboard's summary cards.
+  y = drawKpiCards(doc, getKpiCards(metrics), { marginX, usableWidth, pageHeight, y });
+  y += 4;
 
-  doc.setFontSize(12);
-  doc.text("Recurring Payments Detected", marginX, p4Top);
-  const recurringTable = sectionToTable(metrics?.recurringPayments, sectionColumns("recurringPayments"));
-  if (recurringTable) {
-    autoTable(doc, {
-      startY: p4Top + 5,
-      head: [recurringTable.headers],
-      body: recurringTable.rows,
-      margin: { left: marginX, right: pageWidth - (marginX + colWidth) },
-      tableWidth: colWidth,
-      styles: { fontSize: 8, cellPadding: 2 },
-      headStyles: { fillColor: [30, 41, 59] },
-    });
+  // Charts - in the same order they appear on the dashboard.
+  for (const key of CHART_SECTION_KEYS) {
+    const image = chartImages[key];
+    if (!image) continue;
+    const [chartTitle, chartSubtitle] = CHART_TITLES[key] || [humanizeKey(key), null];
+    y = drawChartImage(doc, image, { marginX, usableWidth, pageHeight, y, label: chartTitle, subtitle: chartSubtitle });
   }
 
-  doc.text("Biggest Expense Category, Per Month", col2X, p4Top);
-  const largestTable = sectionToTable(metrics?.largestExpenseCategoryPerMonth, sectionColumns("largestExpenseCategoryPerMonth"));
-  if (largestTable) {
+  // Summary lists - Top Merchants, Recurring Payments, Biggest Expense per
+  // Month - the same three lists shown on the dashboard's summary tab.
+  // Deliberately not including the raw per-row tables (every category, every
+  // month, every balance point, every day) - this export is a summary,
+  // not a transaction dump.
+  for (const [key, , columns] of SECTIONS) {
+    if (!PDF_SUMMARY_LIST_KEYS.includes(key)) continue;
+    const table = sectionToTable(metrics?.[key], columns);
+    if (!table) continue;
+
+    const [listTitle, listSubtitle] = LIST_SECTION_META[key];
+    if (y > pageHeight - 40) {
+      doc.addPage();
+      y = 18;
+    }
+    doc.setFontSize(12);
+    doc.setTextColor(20);
+    doc.text(listTitle, marginX, y);
+    y += 5;
+    doc.setFontSize(8.5);
+    doc.setTextColor(130);
+    doc.text(listSubtitle, marginX, y);
+    doc.setTextColor(0);
+    y += 4;
+
+    if (y > pageHeight - 30) {
+      doc.addPage();
+      y = 18;
+    }
     autoTable(doc, {
-      startY: p4Top + 5,
-      head: [largestTable.headers],
-      body: largestTable.rows,
-      margin: { left: col2X, right: pageWidth - (col2X + colWidth) },
-      tableWidth: colWidth,
-      styles: { fontSize: 8, cellPadding: 2 },
+      startY: y,
+      head: [table.headers],
+      body: table.rows.map((row) => row.map(pdfSafe)),
+      margin: { left: marginX, right: marginX },
+      styles: { fontSize: 8.5, cellPadding: 2.2 },
       headStyles: { fillColor: [30, 41, 59] },
     });
+    y = doc.lastAutoTable.finalY + 8;
   }
 
   doc.save(`${slugify(meta.title)}-report.pdf`);
