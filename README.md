@@ -41,10 +41,40 @@ finance-dashboard/
 │   └── server.js
 ├── frontend/
 │   ├── public/sample-statement.xlsx  # 500-transaction test file, served from the "download a sample" button
-│   ├── src/pages/LandingPage.jsx  # public, signed-out entry point (Google button)
-│   ├── src/pages/UploadPage.jsx, DashboardPage.jsx
-│   ├── src/components/        # KpiCards, charts, FilterBar, StatementSwitcher, etc.
-│   └── src/hooks/              # useAuth, useStatements, useMetrics
+│  ├───pages
+    │       DashboardPage.jsx
+    │       LandingPage.jsx
+    │       UploadPage.jsx
+    ├───components
+    │       BalanceTrendChart.jsx
+    │       CashVsDigitalChart.jsx
+    │       CategoryBreakdownChart.jsx
+    │       ChartCard.jsx
+    │       ContinuityBanner.jsx
+    │       DataQualityBanner.jsx
+    │       DayOfWeekChart.jsx
+    │       FileDropzone.jsx
+    │       FilterBar.jsx
+    │       KpiCards.jsx
+    │       LargestExpenseByMonth.jsx
+    │       MonthlyTrendChart.jsx
+    │       ParseErrorsPanel.jsx
+    │       PasswordPrompt.jsx
+    │       RecurringPaymentsList.jsx
+    │       ReportDownloadMenu.jsx
+    │       StatementSwitcher.jsx
+    │       TopMerchantsList.jsx
+    │       TransactionsTable.jsx
+    │       UserMenu.jsx
+    │   ├───hooks
+    │       useAuth.js
+    │       useMetrics.js
+    │       useStatements.js
+     │
+    └───utils
+            api.js
+            format.js
+            reportGenerators.js          # useAuth, useStatements, useMetrics
 └── README.md (this file)
 ```
 

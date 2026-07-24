@@ -71,7 +71,7 @@ export default function UploadPage({
   return (
     <div className="min-h-screen bg-canvas">
       <header className="border-b border-border bg-surface">
-        <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-5">
+        <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-3 px-4 py-4 sm:py-5">
           <div className="flex items-center gap-2.5">
             <LedgerMark />
             <span className="font-display text-[17px] font-bold text-ink">Statement Analysis</span>
@@ -80,10 +80,12 @@ export default function UploadPage({
         </div>
       </header>
 
-      <div className="px-4 py-14">
+      <div className="px-4 py-10 sm:py-14">
         <div className="mx-auto w-full max-w-2xl">
           <div className="mb-7 text-center">
-            <h1 className="font-display text-3xl font-bold text-ink">Understand your spending in one upload</h1>
+            <h1 className="font-display text-2xl font-bold text-ink sm:text-3xl">
+              Understand your spending in one upload
+            </h1>
             <p className="mt-2 text-sm text-ink-muted">
               Upload a bank statement (.xls, .xlsx, or .pdf) and get a full visual breakdown - no
               spreadsheets, no manual work. Every figure traces back to an actual row in your statement.
@@ -94,17 +96,17 @@ export default function UploadPage({
             <a
               href="/sample-statement.xlsx"
               download
-              className="mb-5 flex items-center justify-center gap-2 rounded-lg border border-dashed border-accent/40 bg-accent-soft px-4 py-3 text-sm font-medium text-accent hover:bg-accent-soft/70"
+              className="mb-5 flex items-center justify-center gap-2 rounded-lg border border-dashed border-accent/40 bg-accent-soft px-4 py-3 text-center text-sm font-medium text-accent hover:bg-accent-soft/70"
             >
-              <Download size={15} />
-              See what's inside — download a sample statement (500 test transactions)
+              <Download size={15} className="shrink-0" />
+              <span>See what's inside — download a sample statement (500 test transactions)</span>
             </a>
           )}
 
           {phase === "idle" && <FileDropzone onFileSelected={handleFileSelected} />}
 
           {(phase === "uploading" || phase === "processing") && (
-            <div className="card flex flex-col items-center gap-4 px-8 py-16 text-center">
+            <div className="card flex flex-col items-center gap-4 px-6 py-12 text-center sm:px-8 sm:py-16">
               <Loader2 size={30} className="animate-spin text-accent" />
               <div>
                 <p className="font-display text-lg font-semibold text-ink">
@@ -119,7 +121,7 @@ export default function UploadPage({
           )}
 
           {phase === "error" && (
-            <div className="card flex flex-col items-center gap-4 border-negative/30 px-8 py-12 text-center">
+            <div className="card flex flex-col items-center gap-4 border-negative/30 px-6 py-10 text-center sm:px-8 sm:py-12">
               <AlertTriangle size={28} className="text-negative" />
               <div>
                 <p className="font-display text-lg font-semibold text-ink">Couldn't process that file</p>
@@ -164,8 +166,8 @@ export default function UploadPage({
           )}
         </div>
 
-        <div className="mx-auto mt-16 w-full max-w-4xl">
-          <div className="mb-4 flex items-baseline justify-between">
+        <div className="mx-auto mt-12 w-full max-w-4xl sm:mt-16">
+          <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
             <h2 className="font-display text-base font-bold text-ink">Your statements</h2>
             {selected.length > 0 && (
               <button
@@ -188,46 +190,58 @@ export default function UploadPage({
               No statements uploaded yet. Upload one above to get started.
             </div>
           ) : (
-            <div className="flex flex-col gap-3.05">
+            <div className="flex flex-col gap-3">
               {statements.map((s) => (
-                <div key={s._id} className="card flex items-center gap-3.5 px-6.5 py-3.5">
-                  <input
-                    type="checkbox"
-                    checked={selected.includes(s._id)}
-                    onChange={() => toggleSelected(s._id)}
-                    aria-label={`Select ${s.filename}`}
-                    className="accent-accent"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 text-[13.5px] font-semibold text-ink">
-                      {formatBankName(s.bankProfile)} ·{" "}
-                      {s.accountNumber ? `••${s.accountNumber.slice(-4)}` : "Unknown account"}
-                      {s.parseErrorCount > 0 && (
-                        <span className="rounded-full bg-warn-soft px-2 py-0.5 text-[11px] font-semibold text-warn">
-                          {s.parseErrorCount} flagged row{s.parseErrorCount === 1 ? "" : "s"}
+                <div
+                  key={s._id}
+                  className="card flex flex-col gap-3 px-4 py-3.5 sm:flex-row sm:items-center sm:gap-3.5 sm:px-6 sm:py-3.5"
+                >
+                  <div className="flex min-w-0 flex-1 items-start gap-3.5">
+                    <input
+                      type="checkbox"
+                      checked={selected.includes(s._id)}
+                      onChange={() => toggleSelected(s._id)}
+                      aria-label={`Select ${s.filename}`}
+                      className="mt-0.5 shrink-0 accent-accent"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2 text-[13.5px] font-semibold text-ink">
+                        <span className="truncate">
+                          {formatBankName(s.bankProfile)} ·{" "}
+                          {s.accountNumber ? `••${s.accountNumber.slice(-4)}` : "Unknown account"}
                         </span>
-                      )}
-                    </div>
-                    <div className="mt-0.5 text-xs text-ink-muted">
-                      {formatDateHyphen(s.periodStart)} – {formatDateHyphen(s.periodEnd)} · {s.transactionCount} transactions
+                        {s.parseErrorCount > 0 && (
+                          <span className="shrink-0 rounded-full bg-warn-soft px-2 py-0.5 text-[11px] font-semibold text-warn">
+                            {s.parseErrorCount} flagged row{s.parseErrorCount === 1 ? "" : "s"}
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-0.5 truncate text-xs text-ink-muted">
+                        {formatDateHyphen(s.periodStart)} – {formatDateHyphen(s.periodEnd)} · {s.transactionCount} transactions
+                      </div>
                     </div>
                   </div>
-                  <div className="whitespace-nowrap font-mono text-[13px] text-ink-muted">
-                    closes {formatRupees(s.closingBalancePaise, { decimals: 2 })}
+
+                  <div className="flex flex-wrap items-center justify-between gap-2 sm:justify-end sm:gap-3">
+                    <div className="whitespace-nowrap font-mono text-[13px] text-ink-muted">
+                      closes {formatRupees(s.closingBalancePaise, { decimals: 2 })}
+                    </div>
+                    <div className="flex shrink-0 gap-2">
+                      <button
+                        onClick={() => onViewStatements([s._id])}
+                        className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-ink"
+                      >
+                        View
+                      </button>
+                      <button
+                        onClick={() => confirmDelete(s._id)}
+                        disabled={deletingId === s._id}
+                        className="rounded-lg border border-negative/30 bg-negative-soft px-3 py-1.5 text-sm text-negative disabled:opacity-60"
+                      >
+                        {deletingId === s._id ? "Deleting…" : "Delete"}
+                      </button>
+                    </div>
                   </div>
-                  <button
-                    onClick={() => onViewStatements([s._id])}
-                    className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-ink"
-                  >
-                    View
-                  </button>
-                  <button
-                    onClick={() => confirmDelete(s._id)}
-                    disabled={deletingId === s._id}
-                    className="rounded-lg border border-negative/30 bg-negative-soft px-3 py-1.5 text-sm text-negative disabled:opacity-60"
-                  >
-                    {deletingId === s._id ? "Deleting…" : "Delete"}
-                  </button>
                 </div>
               ))}
             </div>
@@ -266,11 +280,11 @@ function PasswordModal({ fileName, error, onSubmit, onCancel }) {
       role="dialog"
       aria-modal="true"
       aria-label="Enter file password"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 px-4"
       onClick={onCancel}
     >
       <form
-        className="card w-[360px] px-6 pb-5 pt-6"
+        className="card w-full max-w-[360px] px-5 pb-5 pt-6 sm:px-6"
         onClick={(e) => e.stopPropagation()}
         onSubmit={submit}
       >
@@ -288,7 +302,7 @@ function PasswordModal({ fileName, error, onSubmit, onCancel }) {
           className="w-full rounded-lg border border-border px-3 py-2 text-sm text-ink outline-none focus:border-accent"
         />
         {error && <div className="mt-2 text-xs text-negative">{error}</div>}
-        <div className="mt-4 flex justify-end gap-2">
+        <div className="mt-4 flex flex-wrap justify-end gap-2">
           <button
             type="button"
             onClick={onCancel}

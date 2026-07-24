@@ -1,6 +1,6 @@
-export default function ChartCard({ title, subtitle, children, className = "" }) {
+export default function ChartCard({ title, subtitle, children, className = "", chartKey }) {
   return (
-    <div className={`card flex flex-col gap-3 px-5 py-4 ${className}`}>
+    <div className={`card flex flex-col gap-3 px-5 py-4 ${className}`} data-chart-key={chartKey || undefined}>
       <div>
         <h3 className="font-display text-sm font-semibold text-ink">{title}</h3>
         {subtitle && <p className="text-xs text-ink-dim">{subtitle}</p>}

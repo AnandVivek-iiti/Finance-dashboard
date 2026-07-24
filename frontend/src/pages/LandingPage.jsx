@@ -39,8 +39,28 @@ const FAQS = [
   },
 ];
 
+// Google Identity Services renders its button at a fixed pixel width, so we
+// compute a width that fits the viewport (minus the page's horizontal
+// padding) instead of hard-coding one value that can overflow small phones.
+function useResponsiveGsiWidth(maxWidth = 280, minWidth = 220, horizontalPadding = 48) {
+  const [width, setWidth] = useState(maxWidth);
+
+  useEffect(() => {
+    const compute = () => {
+      const available = window.innerWidth - horizontalPadding;
+      setWidth(Math.max(minWidth, Math.min(maxWidth, available)));
+    };
+    compute();
+    window.addEventListener("resize", compute);
+    return () => window.removeEventListener("resize", compute);
+  }, [maxWidth, minWidth, horizontalPadding]);
+
+  return width;
+}
+
 function GoogleButton({ onCredential, className = "" }) {
   const ref = useRef(null);
+  const width = useResponsiveGsiWidth();
 
   useEffect(() => {
     const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
@@ -55,11 +75,11 @@ function GoogleButton({ onCredential, className = "" }) {
       size: "large",
       shape: "pill",
       text: "continue_with",
-      width: 280,
+      width,
     });
-  }, [onCredential]);
+  }, [onCredential, width]);
 
-  return <div ref={ref} className={className} />;
+  return <div ref={ref} className={`flex w-full justify-center ${className}`} />;
 }
 
 function FaqItem({ q, a }) {
@@ -94,21 +114,21 @@ export default function LandingPage({ onLogin }) {
   };
 
   return (
-    <div className="min-h-screen bg-canvas">
+    <div className="min-h-screen overflow-x-hidden bg-canvas">
       {/* Hero */}
-      <header className="border-b border-border bg-surface px-4 py-16 lg:px-8">
+      <header className="border-b border-border bg-surface px-4 py-12 sm:py-16 lg:px-8">
         <div className="mx-auto flex max-w-3xl flex-col items-center gap-6 text-center">
           <span className="eyebrow">Finance Dashboard</span>
-          <h1 className="font-display text-3xl font-bold text-ink lg:text-4xl">
+          <h1 className="font-display text-2xl font-bold text-ink sm:text-3xl lg:text-4xl">
             Turn your bank statement into a clear spending report - for your eyes only.
           </h1>
-          <p className="max-w-xl text-sm leading-relaxed text-ink-muted lg:text-base">
+          <p className="max-w-xl text-sm leading-relaxed text-ink-muted sm:text-base">
             Reading a bank statement PDF or Excel file by hand is tedious and error-prone, and a
             single wrong spreadsheet formula can silently throw off every total. This tool checks
             every transaction against the bank's own running balance, so nothing on your dashboard
             is guessed.
           </p>
-          <div className="flex flex-col items-center gap-2">
+          <div className="flex w-full max-w-xs flex-col items-center gap-2">
             <GoogleButton onCredential={handleCredential} />
             <p className="text-xs text-ink-dim">No signup form, no password to create - just your Google account.</p>
             {authError && <p className="text-xs text-negative">{authError}</p>}
@@ -117,9 +137,9 @@ export default function LandingPage({ onLogin }) {
       </header>
 
       {/* What it does */}
-      <section className="px-4 py-14 lg:px-8">
+      <section className="px-4 py-12 sm:py-14 lg:px-8">
         <div className="mx-auto max-w-5xl">
-          <h2 className="text-center font-display text-xl font-bold text-ink">What it does</h2>
+          <h2 className="text-center font-display text-lg font-bold text-ink sm:text-xl">What it does</h2>
           <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <div className="card p-5">
               <UploadCloud className="text-accent" size={22} />
@@ -158,9 +178,9 @@ export default function LandingPage({ onLogin }) {
       </section>
 
       {/* Supported banks */}
-      <section className="border-t border-border bg-surface px-4 py-14 lg:px-8">
+      <section className="border-t border-border bg-surface px-4 py-12 sm:py-14 lg:px-8">
         <div className="mx-auto max-w-3xl text-center">
-          <h2 className="font-display text-xl font-bold text-ink">Supported banks</h2>
+          <h2 className="font-display text-lg font-bold text-ink sm:text-xl">Supported banks</h2>
           <p className="mt-3 text-sm leading-relaxed text-ink-muted">
             <strong className="text-ink">Canara Bank and State Bank of India (SBI)</strong>{" "}
             statements are fully supported and verified - header detection and column mapping are
@@ -174,11 +194,11 @@ export default function LandingPage({ onLogin }) {
       </section>
 
       {/* Privacy */}
-      <section className="px-4 py-14 lg:px-8">
+      <section className="px-4 py-12 sm:py-14 lg:px-8">
         <div className="mx-auto max-w-3xl">
           <div className="flex items-center justify-center gap-2">
-            <Lock size={18} className="text-accent" />
-            <h2 className="font-display text-xl font-bold text-ink">Your data is yours alone</h2>
+            <Lock size={18} className="shrink-0 text-accent" />
+            <h2 className="font-display text-lg font-bold text-ink sm:text-xl">Your data is yours alone</h2>
           </div>
           <ul className="mt-6 space-y-3 text-sm leading-relaxed text-ink-muted">
             <li className="card px-5 py-4">
@@ -206,9 +226,9 @@ export default function LandingPage({ onLogin }) {
       </section>
 
       {/* FAQ */}
-      <section className="border-t border-border bg-surface px-4 py-14 lg:px-8">
+      <section className="border-t border-border bg-surface px-4 py-12 sm:py-14 lg:px-8">
         <div className="mx-auto max-w-2xl">
-          <h2 className="text-center font-display text-xl font-bold text-ink">FAQs</h2>
+          <h2 className="text-center font-display text-lg font-bold text-ink sm:text-xl">FAQs</h2>
           <div className="mt-6 flex flex-col gap-2.5">
             {FAQS.map((f) => (
               <FaqItem key={f.q} q={f.q} a={f.a} />
@@ -218,10 +238,12 @@ export default function LandingPage({ onLogin }) {
       </section>
 
       {/* Footer CTA */}
-      <footer className="px-4 py-16 lg:px-8">
+      <footer className="px-4 py-12 sm:py-16 lg:px-8">
         <div className="mx-auto flex max-w-xl flex-col items-center gap-4 text-center">
-          <h2 className="font-display text-lg font-bold text-ink">Ready to see where your money went?</h2>
-          <GoogleButton onCredential={handleCredential} />
+          <h2 className="font-display text-base font-bold text-ink sm:text-lg">Ready to see where your money went?</h2>
+          <div className="w-full max-w-xs">
+            <GoogleButton onCredential={handleCredential} />
+          </div>
           {authError && <p className="text-xs text-negative">{authError}</p>}
         </div>
       </footer>
