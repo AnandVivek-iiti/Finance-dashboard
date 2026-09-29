@@ -9,8 +9,10 @@ each transaction; nothing is estimated or guessed.
 finance-dashboard/
 ├── backend/
 │   ├── bankProfiles/        # Per-bank header detection + column mapping
-│   │   ├── canara.js        #   Canara Bank profile (used for your statement)
+│   │   ├── canara.js        #   Canara Bank profile
 │   │   ├── sbi.js           #   State Bank of India profile
+│   │   ├── icici.js         #   ICICI Bank profile
+│   │   ├── hdfc.js          #   HDFC Bank profile
 │   │   ├── generic.js       #   Fallback for other banks
 │   │   └── index.js         #   Tries each profile, first match wins
 │   ├── parsers/
@@ -37,52 +39,55 @@ finance-dashboard/
 │   │   ├── errorHandler.js        # sanitizes all errors before they reach the client (see below)
 │   │   ├── validateFileSignature.js  # checks uploaded file's magic bytes match its extension
 │   │   └── security.js            # helmet, rate limiting, HPP, XHR-header CSRF guard
+│   ├── utils/                 # money.js (integer paise), sqlFilters.js, header matching + other shared helpers
 │   ├── controllers/, routes/
 │   └── server.js
 ├── frontend/
 │   ├── public/sample-statement.xlsx  # 500-transaction test file, served from the "download a sample" button
-│  ├───pages
-    │       DashboardPage.jsx
-    │       LandingPage.jsx
-    │       UploadPage.jsx
-    ├───components
-    │       BalanceTrendChart.jsx
-    │       CashVsDigitalChart.jsx
-    │       CategoryBreakdownChart.jsx
-    │       ChartCard.jsx
-    │       ContinuityBanner.jsx
-    │       DataQualityBanner.jsx
-    │       DayOfWeekChart.jsx
-    │       FileDropzone.jsx
-    │       FilterBar.jsx
-    │       KpiCards.jsx
-    │       LargestExpenseByMonth.jsx
-    │       MonthlyTrendChart.jsx
-    │       ParseErrorsPanel.jsx
-    │       PasswordPrompt.jsx
-    │       RecurringPaymentsList.jsx
-    │       ReportDownloadMenu.jsx
-    │       StatementSwitcher.jsx
-    │       TopMerchantsList.jsx
-    │       TransactionsTable.jsx
-    │       UserMenu.jsx
-    │   ├───hooks
-    │       useAuth.js
-    │       useMetrics.js
-    │       useStatements.js
-     │
-    └───utils
-            api.js
-            format.js
-            reportGenerators.js          # useAuth, useStatements, useMetrics
+│   └── src/
+│       ├── main.jsx, App.jsx, index.css
+│       ├── pages/
+│       │   ├── LandingPage.jsx       # public sign-in page (hero, banks, privacy, FAQs)
+│       │   ├── UploadPage.jsx
+│       │   └── DashboardPage.jsx
+│       ├── components/
+│       │   ├── BalanceTrendChart.jsx
+│       │   ├── CashVsDigitalChart.jsx
+│       │   ├── CategoryBreakdownChart.jsx
+│       │   ├── ChartCard.jsx
+│       │   ├── ContinuityBanner.jsx
+│       │   ├── DataQualityBanner.jsx
+│       │   ├── DayOfWeekChart.jsx
+│       │   ├── FileDropzone.jsx
+│       │   ├── FilterBar.jsx
+│       │   ├── KpiCards.jsx
+│       │   ├── LargestExpenseByMonth.jsx
+│       │   ├── MonthlyTrendChart.jsx
+│       │   ├── ParseErrorsPanel.jsx
+│       │   ├── PasswordPrompt.jsx
+│       │   ├── RecurringPaymentsList.jsx
+│       │   ├── ReportDownloadMenu.jsx
+│       │   ├── StatementSwitcher.jsx
+│       │   ├── TopMerchantsList.jsx
+│       │   ├── TransactionsTable.jsx
+│       │   └── UserMenu.jsx
+│       ├── hooks/
+│       │   ├── useAuth.js
+│       │   ├── useMetrics.js
+│       │   └── useStatements.js
+│       └── utils/
+│           ├── api.js
+│           ├── chartCapture.js       # captures charts as images for the PDF report
+│           ├── format.js
+│           └── reportGenerators.js   # PDF + Excel report builders
 └── README.md (this file)
 ```
 
 ## Why this stack
 
 - **Postgres** (developed against [Neon](https://neon.tech), works with any
-  Postgres instance) stores everything in four tables: `statements`
-  (metadata per upload), `transactions` (normalized, strictly-typed, one row
+  Postgres instance) stores everything in five tables: `users`
+  (Google identity), `statements` (metadata per upload), `transactions` (normalized, strictly-typed, one row
   per transaction), `parse_errors` (rows that couldn't be verified - shown to
   you, not hidden), and `category_overrides`. There's no ORM - every query is
   plain, parameterized SQL (`backend/models/`, `backend/utils/sqlFilters.js`)
@@ -272,9 +277,10 @@ you can see the full dashboard immediately.
    This step is skipped entirely, with no behavior change, if `GROQ_API_KEY`
    isn't set.
 2. **Detect the bank & find the header row.** `bankProfiles/index.js` tries
-   each profile's header-matching rules against the raw rows. Canara Bank
-   and SBI exports are matched by `canara.js`/`sbi.js` (the Canara profile
-   even tolerates the bank's own "Trasnaction ID" typo). Unrecognized
+   each profile's header-matching rules against the raw rows. Canara Bank,
+   SBI, ICICI and HDFC exports are matched by `canara.js`, `sbi.js`,
+   `icici.js` and `hdfc.js` (the Canara profile even tolerates the bank's
+   own "Trasnaction ID" typo). Unrecognized
    layouts fall back to `generic.js`; if nothing matches at all, the upload
    is rejected with a clear message instead of guessing a column layout.
 3. **Normalize every row** (`tableParser.js`) into:
@@ -343,7 +349,8 @@ IFSC code, and your name.
 
 ## 7. Adding support for another bank
 
-Copy `backend/bankProfiles/canara.js` to e.g. `hdfc.js`, adjust
+Copy an existing profile such as `backend/bankProfiles/sbi.js` to e.g.
+`axis.js`, adjust
 `HEADER_MATCHERS` to that bank's column names and `extractMetadata` to its
 letterhead layout, then add it to the `PROFILES` array in
 `bankProfiles/index.js` (before `generic`). Nothing else needs to change —
@@ -358,8 +365,12 @@ bank-agnostic.
   accuracy also depends on scan quality - each response includes a
   confidence score, and low-confidence pages are still worth spot-checking
   against the original statement.
-- Bank profiles currently cover Canara Bank and SBI, with a `generic.js`
-  fallback for other layouts (see "Adding support for another bank" below).
+- Bank profiles currently cover Canara Bank, SBI, ICICI and HDFC, with a
+  `generic.js` fallback for other layouts (see "Adding support for another
+  bank" above). Canara and SBI have been checked end-to-end against real
+  statements; the ICICI and HDFC profiles are newly added and follow the
+  SBI pattern, so spot-check their first uploads against the original
+  statement.
 - Merchant-name extraction is rule-based pattern matching on remarks text,
   not NLP - good enough for "Top Merchants" but won't be perfect on every
   bank's remarks format.

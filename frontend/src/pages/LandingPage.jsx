@@ -19,7 +19,7 @@ const FAQS = [
   },
   {
     q: "Is my data private?",
-    a: "Yes. Only your signed-in Google account can ever see your statements, transactions, or account details - see the Privacy section above.",
+    a: "Yes. Your file is deleted right after parsing, and your data is accessible only through your own Google sign-in. You can delete it permanently at any time.",
   },
   {
     q: "Do you store my bank password or account password?",
@@ -38,10 +38,6 @@ const FAQS = [
     a: "Yes - the dashboard is free to use.",
   },
 ];
-
-// Google Identity Services renders its button at a fixed pixel width, so we
-// compute a width that fits the viewport (minus the page's horizontal
-// padding) instead of hard-coding one value that can overflow small phones.
 function useResponsiveGsiWidth(maxWidth = 280, minWidth = 220, horizontalPadding = 48) {
   const [width, setWidth] = useState(maxWidth);
 
