@@ -11,8 +11,6 @@ finance-dashboard/
 │   ├── bankProfiles/        # Per-bank header detection + column mapping
 │   │   ├── canara.js        #   Canara Bank profile
 │   │   ├── sbi.js           #   State Bank of India profile
-│   │   ├── icici.js         #   ICICI Bank profile
-│   │   ├── hdfc.js          #   HDFC Bank profile
 │   │   ├── generic.js       #   Fallback for other banks
 │   │   └── index.js         #   Tries each profile, first match wins
 │   ├── parsers/
