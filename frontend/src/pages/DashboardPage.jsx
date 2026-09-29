@@ -65,6 +65,10 @@ export default function DashboardPage({
   const title = selectedStatements.map((s) => s.filename).join(" + ") || "Statements";
   const bankLabel = formatBankName(primary?.bankProfile);
 
+  const hasValidationWarnings = selectedStatements.some(
+    (s) => s.parseErrorCount > 0 || s.continuityWarning
+  );
+
   return (
     <div className="min-h-screen bg-canvas pb-16">
       <header className="border-b border-border bg-surface px-4 py-4 lg:px-8">
@@ -72,7 +76,7 @@ export default function DashboardPage({
           <div className="flex min-w-0 items-center gap-3">
             <button
               onClick={onUploadNew}
-              className="flex shrink-0 items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-ink shadow-card"
+              className="flex shrink-0 items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-ink shadow-card hover:shadow-card-hover transition-shadow"
             >
               <ArrowLeft size={15} /> Statements
             </button>
@@ -96,18 +100,16 @@ export default function DashboardPage({
             <div className="flex gap-2">
               <button
                 onClick={() => setTab("summary")}
-                className={`rounded-lg px-3 py-1.5 text-xs font-medium sm:px-3.5 sm:py-2 sm:text-sm ${
-                  tab === "summary" ? "bg-accent text-white" : "border border-border bg-surface text-ink"
-                }`}
-              >
+                className={`rounded-lg px-3 py-1.5 text-xs font-medium sm:px-3.5 sm:py-2 sm:text-sm ${tab === "summary"
+                    ? "bg-accent text-white"
+                    : "border border-border bg-surface text-ink"
+                  }`}>
                 Summary
               </button>
               <button
                 onClick={() => setTab("transactions")}
-                className={`rounded-lg px-3 py-1.5 text-xs font-medium sm:px-3.5 sm:py-2 sm:text-sm ${
-                  tab === "transactions" ? "bg-accent text-white" : "border border-border bg-surface text-ink"
-                }`}
-              >
+                className={`rounded-lg px-3 py-1.5 text-xs font-medium sm:px-3.5 sm:py-2 sm:text-sm ${tab === "transactions" ? "bg-accent text-white" : "border border-border bg-surface text-ink"
+                  }`}>
                 Transactions
               </button>
             </div>
@@ -134,7 +136,10 @@ export default function DashboardPage({
           <>
             <KpiCards metrics={metrics} loading={loading} />
 
-            <div ref={chartsGridRef} className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <div
+              ref={chartsGridRef}
+              className="grid grid-cols-1 gap-4 lg:grid-cols-2 animate-stagger-children"
+            >
               <MonthlyTrendChart data={metrics?.monthlySpendTrend} showValues={exportMode} />
               <BalanceTrendChart data={metrics?.balanceOverTime} showValues={exportMode} />
               <CategoryBreakdownChart data={metrics?.spendByCategory} showValues={exportMode} />
@@ -144,6 +149,22 @@ export default function DashboardPage({
               <RecurringPaymentsList data={metrics?.recurringPayments} />
               <LargestExpenseByMonth data={metrics?.largestExpenseCategoryPerMonth} />
             </div>
+
+            {hasValidationWarnings && (
+              <div className="mt-4 rounded-lg border border-warn/20 bg-warn-soft p-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-warn">
+                    ⚠️ {selectedStatements.length}{" "}
+                    {selectedStatements.length === 1 ? "statement needs" : "statements need"} attention
+                  </span>
+                  <span className="text-xs text-ink-muted">
+                    {selectedStatements.some((st) => st.parseErrorCount > 0)
+                      ? "Parse errors detected - see panel above"
+                      : "Balance continuity warning - see panel above"}
+                  </span>
+                </div>
+              </div>
+            )}
           </>
         ) : (
           <div className="overflow-x-auto">

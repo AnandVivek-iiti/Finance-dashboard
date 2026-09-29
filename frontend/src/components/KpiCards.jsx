@@ -1,13 +1,27 @@
 import { formatRupees, formatDate } from "../utils/format.js";
 
-function Card({ label, value, sub, tone = "default" }) {
-  const toneClass = tone === "positive" ? "text-positive" : tone === "negative" ? "text-negative" : tone === "warn" ? "text-warn" : "text-ink";
+function Card({ label, value, sub, tone = "default", className: explicitClass }) {
+  const toneClass =
+    tone === "positive"
+      ? "text-positive soft:bg-positive-100"
+      : tone === "negative"
+      ? "text-negative soft:bg-negative-50"
+      : tone === "warn"
+      ? "text-warn soft:bg-warn-50"
+      : "text-ink";
+
+  const baseClasses = "card flex flex-col gap-2 px-5 py-4";
+  const hoverClasses = "transition-colors hover:shadow-card-hover";
+
+  const fullClassName = `${baseClasses} ${explicitClass || ""} ${hoverClasses}`;
 
   return (
-    <div className="card flex flex-col gap-2 px-5 py-4">
+    <div className={fullClassName}>
       <span className="text-xs text-ink-muted">{label}</span>
-      <span className={`font-mono text-xl font-semibold ${toneClass}`}>{value}</span>
-      {sub && <span className="text-[11.5px] text-ink-dim">{sub}</span>}
+      <span className={`font-mono text-xl font-semibold ${toneClass} transition-colors`}>{value}</span>
+      {sub && (
+        <span className="text-[11.5px] text-ink-dim">{sub}</span>
+      )}
     </div>
   );
 }
@@ -17,7 +31,16 @@ export default function KpiCards({ metrics, loading }) {
     return (
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
         {Array.from({ length: 11 }).map((_, i) => (
-          <div key={i} className="card h-[92px] animate-pulse bg-border/40" />
+          <div
+            key={i}
+            className="
+              card h-[92px]
+              animate-fade-in
+              bg-border/40
+              transition-opacity
+              duration-500
+            "
+          />
         ))}
       </div>
     );
@@ -52,19 +75,25 @@ export default function KpiCards({ metrics, loading }) {
       />
       <Card
         label="Highest withdrawal"
-        value={metrics.highestWithdrawal ? formatRupees(metrics.highestWithdrawal.amountPaise, { decimals: 2 }) : "unavailable"}
+        value={metrics.highestWithdrawal
+          ? formatRupees(metrics.highestWithdrawal.amountPaise, { decimals: 2 })
+          : "unavailable"}
         sub={metrics.highestWithdrawal ? formatDate(metrics.highestWithdrawal.date) : null}
         tone="negative"
       />
       <Card
         label="Highest deposit"
-        value={metrics.highestDeposit ? formatRupees(metrics.highestDeposit.amountPaise, { decimals: 2 }) : "unavailable"}
+        value={metrics.highestDeposit
+          ? formatRupees(metrics.highestDeposit.amountPaise, { decimals: 2 })
+          : "unavailable"}
         sub={metrics.highestDeposit ? formatDate(metrics.highestDeposit.date) : null}
         tone="positive"
       />
       <Card
         label="Lowest balance point"
-        value={metrics.lowestBalancePoint ? formatRupees(metrics.lowestBalancePoint.balancePaise, { decimals: 2 }) : "unavailable"}
+        value={metrics.lowestBalancePoint
+          ? formatRupees(metrics.lowestBalancePoint.balancePaise, { decimals: 2 })
+          : "unavailable"}
         sub={metrics.lowestBalancePoint ? `on ${formatDate(metrics.lowestBalancePoint.date)} - risk period` : null}
         tone="warn"
       />

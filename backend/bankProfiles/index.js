@@ -1,11 +1,13 @@
 ﻿const canara = require("./canara");
 const sbi = require("./sbi");
+const icici = require("./icici");
+const hdfc = require("./hdfc");
 const generic = require("./generic");
 const { detectHeader } = require("./headerEngine");
 
 // Header detection is fully shared (headerEngine). This list is only used
 // to pick which profile supplies metadata/skip-rules/balance-extraction.
-const BANK_PROFILES = [canara, sbi];
+const BANK_PROFILES = [canara, sbi, icici, hdfc];
 
 function identifyBankProfile(rows) {
   for (const profile of BANK_PROFILES) {

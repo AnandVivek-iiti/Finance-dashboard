@@ -31,8 +31,8 @@ export default function FileDropzone({ onFileSelected, disabled }) {
         handleFiles(e.dataTransfer.files);
       }}
       onClick={() => !disabled && inputRef.current?.click()}
-      className={`flex cursor-pointer flex-col items-center justify-center gap-4 rounded-2xl border-2 border-dashed px-8 py-16 text-center transition-colors ${
-        dragActive ? "border-accent bg-accent-soft" : "border-border bg-surface hover:border-accent/50"
+      className={`flex cursor-pointer flex-col items-center justify-center gap-4 rounded-2xl border-2 border-dashed px-8 py-16 text-center transition-all ${
+        dragActive ? "border-accent bg-accent-soft shadow-accent-glow" : "border-border bg-surface hover:border-accent/50 hover:shadow-card-hover"
       } ${disabled ? "pointer-events-none opacity-60" : ""}`}
     >
       <div className="flex h-14 w-14 items-center justify-center rounded-full bg-accent-soft text-accent">
@@ -42,8 +42,8 @@ export default function FileDropzone({ onFileSelected, disabled }) {
         <p className="font-display text-lg font-semibold text-ink">
           Drop your statement here, or click to browse
         </p>
+        <p className="text-xs text-ink-dim mt-1">.XLS, .XLSX, or .PDF - max 25MB</p>
       </div>
-      <div className="text-xs text-ink-dim">.XLS, .XLSX, or .PDF - max 25MB</div>
       <input
         ref={inputRef}
         type="file"
